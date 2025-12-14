@@ -19,7 +19,7 @@ func NewFrameReader(r io.Reader) *FrameReader {
 	return &FrameReader{Reader: *bufReader, Header: h}
 }
 
-func (fr FrameReader) Ready() error {
+func (fr *FrameReader) Ready() error {
 	// read in the header of the frame
 	bytes, err := fr.ReadBytes(7)
 	if err != nil {
@@ -38,7 +38,7 @@ func (fr FrameReader) Ready() error {
 	return headerError
 }
 
-func (fr FrameReader) Next() (Block, io.Reader, error) {
+func (fr *FrameReader) Next() (Block, io.Reader, error) {
 	// read in the block header
 	var b Block
 	// read in the blockType first to make sure there is more to read
@@ -74,7 +74,7 @@ func (fr FrameReader) Next() (Block, io.Reader, error) {
 	return b, payloadReader, nil
 }
 
-func (fr FrameReader) ReadBytes(n int) ([]byte, error) {
+func (fr *FrameReader) ReadBytes(n int) ([]byte, error) {
 	// read n bytes from a FrameReader stream
 	bytes := make([]byte, n)
 	for i := range bytes {

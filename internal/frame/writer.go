@@ -24,7 +24,7 @@ func NewFrameWriter(r io.Writer, flags, codec, checksumMode uint8) *FrameWriter 
 	return &FrameWriter{Writer: *bufWriter, Header: h}
 }
 
-func (fw FrameWriter) Ready() error {
+func (fw *FrameWriter) Ready() error {
 	// build byte array for header
 	bytes := []byte(fw.Header.Key)
 	bytes = append(bytes, []byte{fw.Header.Flags, fw.Header.Codec, fw.Header.ChecksumMode}...)
@@ -36,7 +36,7 @@ func (fw FrameWriter) Ready() error {
 	return nil
 }
 
-func (fw FrameWriter) WriteBlock(b Block, p []byte) error {
+func (fw *FrameWriter) WriteBlock(b Block, p []byte) error {
 	// if EOS block is being written
 	if b.BlockType == 0 {
 		fw.Writer.WriteByte(b.BlockType)
