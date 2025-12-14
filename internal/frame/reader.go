@@ -60,7 +60,7 @@ func (fr *FrameReader) Next() (Block, io.Reader, error) {
 	b.USize = binary.BigEndian.Uint64(bytes[1:9])
 	b.CSize = binary.BigEndian.Uint64(bytes[9:17])
 	b.ChecksumMethod = bytes[17]
-	b.CSize = binary.BigEndian.Uint64(bytes[18:26])
+	b.Checksum = binary.BigEndian.Uint64(bytes[18:26])
 
 	// validity check
 	blockError := b.valid()

@@ -9,19 +9,19 @@ const (
 )
 
 const (
-	DefaultCodec uint8 = 1 << iota
-	BlockCodec
+	DefaultCodec = 0
+	BlockCodec   = 1
 )
 
 const (
-	UncompressedCheckSum uint8 = 1 << iota
-	CompressedCheckSum
+	UncompressedCheckSum = 1
+	CompressedCheckSum   = 2
 )
 
 // Header Codec constants
 const (
-	RAW uint8 = 1 << iota
-	RLE
-	HUFFMAN
-	LZ77
+	RAW     = 0
+	RLE     = 1
+	HUFFMAN = 2
+	LZ77    = 3
 )

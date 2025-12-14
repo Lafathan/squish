@@ -33,6 +33,11 @@ func (fw *FrameWriter) Ready() error {
 	if err != nil {
 		return err
 	}
+	// flush it
+	err = fw.Writer.Flush()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -58,6 +63,11 @@ func (fw *FrameWriter) WriteBlock(b Block, p []byte) error {
 
 	// write the bytes
 	_, err := fw.Writer.Write(bytes)
+	if err != nil {
+		return err
+	}
+	// flush it
+	err = fw.Writer.Flush()
 	if err != nil {
 		return err
 	}

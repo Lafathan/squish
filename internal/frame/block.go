@@ -15,7 +15,7 @@ func (b Block) valid() error {
 	if b.BlockType >= 3 {
 		return errors.New("invalid block type found")
 	}
-	if b.ChecksumMethod >= 3 {
+	if b.ChecksumMethod > 3 {
 		return errors.New("invalid checksum method found")
 	}
 	return nil
