@@ -15,6 +15,9 @@ func (b Block) valid() error {
 	if b.BlockType >= 3 {
 		return errors.New("invalid block type found")
 	}
+	if b.CSize > MaxBlockSize {
+		return errors.New("invalid block size found")
+	}
 	if b.ChecksumMethod > 3 {
 		return errors.New("invalid checksum method found")
 	}
