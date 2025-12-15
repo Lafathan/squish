@@ -20,35 +20,35 @@ func NewFrameReader(r io.Reader) *FrameReader {
 
 func (fr *FrameReader) Ready() error {
 	// read in the header of the frame
-	err := fr.Header.ReadHeader(fr.Reader)
+	header, err := ReadHeader(fr.Reader)
 	if err != nil {
 		return err
 	}
+	fr.Header = header
 
 	// validity check
-	headerError := fr.Header.valid()
+	headerError := fr.Header.Valid()
 
 	return headerError
 }
 
 func (fr *FrameReader) Next() (Block, io.Reader, error) {
 	// read in the block header
-	var b Block
-	err := b.ReadBlock(fr)
+	block, err := ReadBlock(fr)
 	if err != nil {
-		return b, nil, err
+		return block, nil, err
 	}
 
 	// validity check
-	blockError := b.valid()
+	blockError := block.Valid()
 	if blockError != nil {
-		return b, nil, blockError
+		return block, nil, blockError
 	}
 
 	// generate an io.reader for the payload
-	payloadReader := io.LimitReader(fr.Reader, int64(b.CSize))
+	payloadReader := io.LimitReader(fr.Reader, int64(block.CSize))
 
-	return b, payloadReader, nil
+	return block, payloadReader, nil
 }
 
 func (fr *FrameReader) ReadBytes(n int) ([]byte, error) {

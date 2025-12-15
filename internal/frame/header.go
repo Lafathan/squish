@@ -12,7 +12,7 @@ type Header struct {
 	ChecksumMode uint8  // stream checksum mode
 }
 
-func (h Header) valid() error {
+func (h *Header) Valid() error {
 	// make sure the header starts with the valid start key
 	if h.Key != Key {
 		return errors.New("invalid header start key")
@@ -20,11 +20,12 @@ func (h Header) valid() error {
 	return nil
 }
 
-func (h *Header) ReadHeader(r *bufio.Reader) error {
+func ReadHeader(r *bufio.Reader) (Header, error) {
+	var h Header
 	// read in the header of the frame
 	bytes, err := r.ReadBytes(7)
 	if err != nil {
-		return err
+		return h, err
 	}
 
 	// assign values to the header of the FrameReader
@@ -33,10 +34,10 @@ func (h *Header) ReadHeader(r *bufio.Reader) error {
 	h.Codec = bytes[5]
 	h.ChecksumMode = bytes[6]
 
-	return nil
+	return h, nil
 }
 
-func (h *Header) WriteHeader(w *bufio.Writer) error {
+func WriteHeader(w *bufio.Writer, h Header) error {
 	// build byte array for header
 	bytes := []byte(h.Key)
 	bytes = append(bytes, []byte{h.Flags, h.Codec, h.ChecksumMode}...)

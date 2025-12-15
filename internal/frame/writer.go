@@ -26,7 +26,7 @@ func NewFrameWriter(r io.Writer, flags, codec, checksumMode uint8) *FrameWriter 
 
 func (fw *FrameWriter) Ready() error {
 	// write the bytes to the stream
-	err := fw.Header.WriteHeader(fw.Writer)
+	err := WriteHeader(fw.Writer, fw.Header)
 	if err != nil {
 		return err
 	}
@@ -37,7 +37,7 @@ func (fw *FrameWriter) Ready() error {
 
 func (fw *FrameWriter) WriteBlock(b Block, p []byte) error {
 	// build block header
-	err := b.WriteBlock(fw)
+	err := WriteBlock(fw, b)
 	if err != nil {
 		return err
 	}
