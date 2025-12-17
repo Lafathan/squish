@@ -56,14 +56,11 @@ func ReadBlock(fr *FrameReader) (Block, error) {
 func WriteBlock(fw *FrameWriter, b Block) error {
 	// if EOS block is being written
 	if b.BlockType == 0 {
-		err := fw.Writer.WriteByte(b.BlockType)
-		if err != nil {
-			return err
-		}
-		return nil
+		_, err := fw.Writer.Write([]byte{0})
+		return err
 	}
 	// build block header
-	bytes := []byte{}
+	bytes := make([]byte, 0, 30)
 	bytes = append(bytes, b.BlockType, b.Codec)
 	bytes = binary.BigEndian.AppendUint64(bytes, b.USize)
 	bytes = binary.BigEndian.AppendUint32(bytes, b.CSize)

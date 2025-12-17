@@ -1,6 +1,6 @@
 package frame
 
-const Key = "SQSH"
+const MagicKey = "SQSH"
 const MaxBlockSize = uint32(1<<32 - 1)
 
 // Header Flag constants

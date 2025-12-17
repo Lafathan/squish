@@ -1,21 +1,17 @@
 package frame
 
 import (
-	"bufio"
 	"io"
 )
 
 type FrameReader struct {
-	Reader *bufio.Reader // io.reader for reading a stream
-	Header Header        // header of the stream
+	Reader io.Reader // io.reader for reading a stream
+	Header Header    // header of the stream
 }
 
 func NewFrameReader(r io.Reader) *FrameReader {
-	// create a FrameReader from an io reader stream
-	bufReader := bufio.NewReader(r)
 	// create an empty header for now
-	var h Header
-	return &FrameReader{Reader: bufReader, Header: h}
+	return &FrameReader{Reader: r}
 }
 
 func (fr *FrameReader) Ready() error {
@@ -25,11 +21,7 @@ func (fr *FrameReader) Ready() error {
 		return err
 	}
 	fr.Header = header
-
-	// validity check
-	headerError := fr.Header.Valid()
-
-	return headerError
+	return fr.Header.Valid()
 }
 
 func (fr *FrameReader) Next() (Block, io.Reader, error) {
@@ -38,13 +30,11 @@ func (fr *FrameReader) Next() (Block, io.Reader, error) {
 	if err != nil {
 		return block, nil, err
 	}
-
 	// validity check
 	blockError := block.Valid()
 	if blockError != nil {
 		return block, nil, blockError
 	}
-
 	// generate an io.reader for the payload
 	payloadReader := io.LimitReader(fr.Reader, int64(block.CSize))
 

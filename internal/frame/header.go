@@ -1,8 +1,8 @@
 package frame
 
 import (
-	"bufio"
 	"errors"
+	"io"
 )
 
 type Header struct {
@@ -14,16 +14,17 @@ type Header struct {
 
 func (h *Header) Valid() error {
 	// make sure the header starts with the valid start key
-	if h.Key != Key {
+	if h.Key != MagicKey {
 		return errors.New("invalid header start key")
 	}
 	return nil
 }
 
-func ReadHeader(r *bufio.Reader) (Header, error) {
+func ReadHeader(r io.Reader) (Header, error) {
 	var h Header
 	// read in the header of the frame
-	bytes, err := r.ReadBytes(7)
+	bytes := make([]byte, 7)
+	_, err := io.ReadFull(r, bytes)
 	if err != nil {
 		return h, err
 	}
@@ -37,7 +38,7 @@ func ReadHeader(r *bufio.Reader) (Header, error) {
 	return h, nil
 }
 
-func WriteHeader(w *bufio.Writer, h Header) error {
+func WriteHeader(w io.Writer, h Header) error {
 	// build byte array for header
 	bytes := []byte(h.Key)
 	bytes = append(bytes, []byte{h.Flags, h.Codec, h.ChecksumMode}...)
