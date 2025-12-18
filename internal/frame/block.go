@@ -43,7 +43,7 @@ func ReadBlock(fr *FrameReader) (Block, error) {
 	}
 
 	// read the codec if there is a block specific one
-	if b.BlockType != BlockCodec {
+	if b.BlockType == BlockCodec {
 		b.Codec, err = fr.ReadByte()
 		if err != nil {
 			return b, err
@@ -93,13 +93,13 @@ func WriteBlock(fw *FrameWriter, b Block) error {
 		return err
 	}
 	// build block header
-	bytes := make([]byte, 1, 30)
+	bytes := make([]byte, 0, 27)
 	bytes = append(bytes, b.BlockType)
 	if b.BlockType == BlockCodec {
 		bytes = append(bytes, b.Codec)
 	}
-	binary.AppendUvarint(bytes, b.USize)
-	binary.AppendUvarint(bytes, b.CSize)
+	bytes = binary.AppendUvarint(bytes, b.USize)
+	bytes = binary.AppendUvarint(bytes, b.CSize)
 	bytes = append(bytes, b.ChecksumMethod)
 	hasUCS := b.ChecksumMethod&UncompressedChecksum != 0
 	hasCCS := b.ChecksumMethod&CompressedChecksum != 0
