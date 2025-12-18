@@ -1,7 +1,8 @@
 package frame
 
 const MagicKey = "SQSH"
-const MaxBlockSize = uint32(1<<32 - 1)
+const MaxBlockSize = uint64(1<<32 - 1)
+const ChecksumSize = 4
 
 // Header Flag constants
 const (
@@ -9,13 +10,15 @@ const (
 )
 
 const (
-	DefaultCodec = 0
-	BlockCodec   = 1
+	EOSCodec     = 0
+	DefaultCodec = 1
+	BlockCodec   = 2
 )
 
 const (
-	UncompressedCheckSum = 1
-	CompressedCheckSum   = 2
+	NoCheckSum           = 0
+	UncompressedChecksum = 1
+	CompressedChecksum   = 2
 )
 
 // Header Codec constants

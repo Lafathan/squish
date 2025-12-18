@@ -9,7 +9,7 @@ type Block struct {
 	BlockType      uint8  // 0x00 EOS, 0x01 Default codec, 0x02 Block codec
 	Codec          uint8  // only used if BlockType == 0x02
 	USize          uint64 // uncompressed size
-	CSize          uint32 // compressed size
+	CSize          uint64 // compressed size
 	ChecksumMethod uint8  // Checksum - uncompressed (0x01), compressed (0x02), both, or none
 	Checksum       uint64 // checksum value 4 bytes for uncompressed, 4 bytes for compressed
 }
@@ -28,28 +28,61 @@ func (b *Block) Valid() error {
 }
 
 func ReadBlock(fr *FrameReader) (Block, error) {
-	// read in the blockType first to make sure there is more to read
 	var b Block
-	blockType, err := fr.ReadBytes(1)
-	if err != nil {
-		return b, err
-	}
-	if blockType[0] == 0 {
-		return b, nil // EOS block type encountered
-	}
-	bytes, err := fr.ReadBytes(22)
+	var err error
+
+	// get block type
+	b.BlockType, err = fr.ReadByte()
 	if err != nil {
 		return b, err
 	}
 
-	// assign values to the block
-	b.BlockType = blockType[0]
-	b.Codec = bytes[0]
-	b.USize = binary.BigEndian.Uint64(bytes[1:9])
-	b.CSize = binary.BigEndian.Uint32(bytes[9:13])
-	b.ChecksumMethod = bytes[13]
-	b.Checksum = binary.BigEndian.Uint64(bytes[14:22])
+	// return if EOS block
+	if b.BlockType == EOSCodec {
+		return b, nil
+	}
 
+	// read the codec if there is a block specific one
+	if b.BlockType != BlockCodec {
+		b.Codec, err = fr.ReadByte()
+		if err != nil {
+			return b, err
+		}
+	}
+
+	// read and assign the varint sizes
+	b.USize, err = binary.ReadUvarint(fr)
+	if err != nil {
+		return b, err
+	}
+	b.CSize, err = binary.ReadUvarint(fr)
+	if err != nil {
+		return b, err
+	}
+
+	// read the checksum method
+	b.ChecksumMethod, err = fr.ReadByte()
+	if err != nil {
+		return b, err
+	}
+
+	// read the checksum data according to the method
+	byteLength := 0
+	if b.ChecksumMethod&UncompressedChecksum != 0x00 {
+		byteLength += ChecksumSize
+	}
+	if b.ChecksumMethod&CompressedChecksum != 0x00 {
+		byteLength += ChecksumSize
+	}
+	if byteLength > 0 {
+		cs, err := fr.ReadBytes(byteLength)
+		if err != nil {
+			return b, err
+		}
+		for _, csbyte := range cs {
+			b.Checksum = (b.Checksum << 8) | uint64(csbyte)
+		}
+	}
 	return b, nil
 }
 
@@ -60,12 +93,21 @@ func WriteBlock(fw *FrameWriter, b Block) error {
 		return err
 	}
 	// build block header
-	bytes := make([]byte, 0, 30)
-	bytes = append(bytes, b.BlockType, b.Codec)
-	bytes = binary.BigEndian.AppendUint64(bytes, b.USize)
-	bytes = binary.BigEndian.AppendUint32(bytes, b.CSize)
+	bytes := make([]byte, 1, 30)
+	bytes = append(bytes, b.BlockType)
+	if b.BlockType == BlockCodec {
+		bytes = append(bytes, b.Codec)
+	}
+	binary.AppendUvarint(bytes, b.USize)
+	binary.AppendUvarint(bytes, b.CSize)
 	bytes = append(bytes, b.ChecksumMethod)
-	bytes = binary.BigEndian.AppendUint64(bytes, b.Checksum)
+	hasUCS := b.ChecksumMethod&UncompressedChecksum != 0
+	hasCCS := b.ChecksumMethod&CompressedChecksum != 0
+	if hasUCS && hasCCS {
+		bytes = binary.BigEndian.AppendUint64(bytes, b.Checksum)
+	} else if hasUCS || hasCCS {
+		bytes = binary.BigEndian.AppendUint32(bytes, uint32(b.Checksum))
+	}
 
 	// write the bytes
 	_, err := fw.Writer.Write(bytes)

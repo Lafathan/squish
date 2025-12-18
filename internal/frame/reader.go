@@ -47,3 +47,9 @@ func (fr *FrameReader) ReadBytes(n int) ([]byte, error) {
 	_, err := io.ReadFull(fr.Reader, bytes)
 	return bytes, err
 }
+
+func (fr *FrameReader) ReadByte() (byte, error) {
+	// read single byte
+	bytes, err := fr.ReadBytes(1)
+	return bytes[0], err
+}
