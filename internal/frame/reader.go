@@ -5,8 +5,9 @@ import (
 )
 
 type FrameReader struct {
-	Reader io.Reader // io.reader for reading a stream
-	Header Header    // header of the stream
+	Reader        io.Reader         // io.reader for reading a stream
+	Header        Header            // header of the stream
+	ActivePayload *io.LimitedReader // active payload
 }
 
 func NewFrameReader(r io.Reader) *FrameReader {
@@ -25,6 +26,10 @@ func (fr *FrameReader) Ready() error {
 }
 
 func (fr *FrameReader) Next() (Block, io.Reader, error) {
+	// double check that there is not an active payload
+	if fr.ActivePayload != nil && fr.ActivePayload.N > 0 {
+		return Block{}, nil, io.ErrClosedPipe
+	}
 	// read in the block header
 	block, err := ReadBlock(fr)
 	if err != nil {
@@ -36,9 +41,9 @@ func (fr *FrameReader) Next() (Block, io.Reader, error) {
 		return block, nil, blockError
 	}
 	// generate an io.reader for the payload
-	payloadReader := io.LimitReader(fr.Reader, int64(block.CSize))
+	fr.ActivePayload = &io.LimitedReader{R: fr.Reader, N: int64(block.CSize)}
 
-	return block, payloadReader, nil
+	return block, fr.ActivePayload, nil
 }
 
 func (fr *FrameReader) ReadBytes(n int) ([]byte, error) {
