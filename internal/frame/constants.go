@@ -10,21 +10,21 @@ const (
 )
 
 const (
-	EOSCodec     = 0
-	DefaultCodec = 1
-	BlockCodec   = 2
+	EOSCodec = iota
+	DefaultCodec
+	BlockCodec
 )
 
 const (
-	NoCheckSum           = 0
-	UncompressedChecksum = 1
-	CompressedChecksum   = 2
+	NoCheckSum = iota
+	UncompressedChecksum
+	CompressedChecksum
 )
 
 // Header Codec constants
 const (
-	RAW     = 0
-	RLE     = 1
-	HUFFMAN = 2
-	LZ77    = 3
+	RAW = iota
+	RLE
+	HUFFMAN
+	LZ77
 )
