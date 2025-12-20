@@ -1,6 +1,7 @@
 package bitio
 
 import (
+	"io"
 	"strings"
 	"testing"
 )
@@ -23,6 +24,28 @@ func TestReadBits(t *testing.T) {
 	}
 	// 8 bits is requested over the last 6 to verify no EOS reading
 	_, err := bitReader.ReadBits(8)
+	if err == nil {
+		t.Fatalf("Read past EOS")
+	}
+}
+
+func TestShortBuffer(t *testing.T) {
+	// test that the BitReader returns as error when trying
+	// to read too many bytes at once
+	reader := strings.NewReader("Hello World!")
+	bitReader := NewBitReader(reader)
+	_, err := bitReader.ReadBits(65)
+	if err != io.ErrShortBuffer {
+		t.Fatalf("Failed short buffer check")
+	}
+}
+
+func TestReadFullError(t *testing.T) {
+	// test returning when the io.ReadFull returns an error
+	reader := strings.NewReader("Hello World!")
+	bitReader := NewBitReader(reader)
+	_, err := bitReader.ReadBits(60)
+	_, err = bitReader.ReadBits(37)
 	if err == nil {
 		t.Fatalf("Read past EOS")
 	}

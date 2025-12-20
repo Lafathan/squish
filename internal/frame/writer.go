@@ -20,6 +20,11 @@ func (fw *FrameWriter) Ready() error {
 	return WriteHeader(fw.Writer, fw.Header)
 }
 
+func (fw *FrameWriter) Close() error {
+	// write an EOS block to the stream
+	return fw.WriteBlock(Block{BlockType: EOSCodec}, []byte{})
+}
+
 func (fw *FrameWriter) WriteBlock(b Block, p []byte) error {
 	// check to see if the payload is the correct size
 	if len(p) != int(b.CSize) {

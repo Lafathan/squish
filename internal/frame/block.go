@@ -107,8 +107,8 @@ func ReadBlock(fr *FrameReader) (Block, error) {
 
 func WriteBlock(fw *FrameWriter, b Block) error {
 	// if EOS block is being written
-	if b.BlockType == 0 {
-		_, err := fw.Writer.Write([]byte{0})
+	if b.BlockType == EOSCodec {
+		_, err := fw.Writer.Write([]byte{b.BlockType})
 		return err
 	}
 	// build block header
