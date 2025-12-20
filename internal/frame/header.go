@@ -2,6 +2,7 @@ package frame
 
 import (
 	"errors"
+	"fmt"
 	"io"
 )
 
@@ -18,6 +19,14 @@ func (h *Header) Valid() error {
 		return errors.New("invalid header start key")
 	}
 	return nil
+}
+
+func (h Header) String() string {
+	s := fmt.Sprintf("Key:          %s\n", h.Key)
+	s += fmt.Sprintf("Flags:        %04b\n", h.Flags)
+	s += fmt.Sprintf("Codec:        %d\n", h.Codec)
+	s += fmt.Sprintf("ChecksumMode: %04b\n", h.ChecksumMode)
+	return s
 }
 
 func ReadHeader(r io.Reader) (Header, error) {

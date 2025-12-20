@@ -6,7 +6,8 @@ const ChecksumSize = 4
 
 // Header Flag constants
 const (
-	HasChecksum uint8 = 1 << iota
+	NoGlobalChecksum uint8 = 1 << iota
+	GlobalChecksum
 )
 
 const (

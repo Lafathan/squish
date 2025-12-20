@@ -3,6 +3,7 @@ package frame
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 )
 
 type Block struct {
@@ -10,6 +11,7 @@ type Block struct {
 	Codec          uint8  // only used if BlockType == 0x02
 	USize          uint64 // uncompressed size
 	CSize          uint64 // compressed size
+	PadBits        uint8  // padded bits (only present for codec that might not end on byte boundary)
 	ChecksumMethod uint8  // Checksum - uncompressed (0x01), compressed (0x02), both, or none
 	Checksum       uint64 // checksum value 4 bytes for uncompressed, 4 bytes for compressed
 }
@@ -25,6 +27,17 @@ func (b *Block) Valid() error {
 		return errors.New("invalid checksum method found")
 	}
 	return nil
+}
+
+func (b Block) String() string {
+	s := fmt.Sprintf("BlockType:      %d\n", b.BlockType)
+	s += fmt.Sprintf("Codec:          %d\n", b.Codec)
+	s += fmt.Sprintf("USize:          %d\n", b.USize)
+	s += fmt.Sprintf("CSize:          %d\n", b.CSize)
+	s += fmt.Sprintf("Padded Bits:    %d\n", b.PadBits)
+	s += fmt.Sprintf("ChecksumMethod: %d\n", b.ChecksumMethod)
+	s += fmt.Sprintf("Checksum:       %012x\n", b.Checksum)
+	return s
 }
 
 func ReadBlock(fr *FrameReader) (Block, error) {
@@ -56,6 +69,12 @@ func ReadBlock(fr *FrameReader) (Block, error) {
 		return b, err
 	}
 	b.CSize, err = binary.ReadUvarint(fr)
+	if err != nil {
+		return b, err
+	}
+
+	// read how many padding bits are used
+	b.PadBits, err = fr.ReadByte()
 	if err != nil {
 		return b, err
 	}
@@ -100,6 +119,7 @@ func WriteBlock(fw *FrameWriter, b Block) error {
 	}
 	bytes = binary.AppendUvarint(bytes, b.USize)
 	bytes = binary.AppendUvarint(bytes, b.CSize)
+	bytes = append(bytes, b.PadBits)
 	bytes = append(bytes, b.ChecksumMethod)
 	hasUCS := b.ChecksumMethod&UncompressedChecksum != 0
 	hasCCS := b.ChecksumMethod&CompressedChecksum != 0
