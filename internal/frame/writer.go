@@ -1,6 +1,7 @@
 package frame
 
 import (
+	"bytes"
 	"errors"
 	"io"
 )
@@ -22,20 +23,33 @@ func (fw *FrameWriter) Ready() error {
 
 func (fw *FrameWriter) Close() error {
 	// write an EOS block to the stream
-	return fw.WriteBlock(Block{BlockType: EOSCodec}, []byte{})
+	return fw.WriteBlock(Block{BlockType: EOSCodec, CSize: 0}, nil)
 }
 
-func (fw *FrameWriter) WriteBlock(b Block, p []byte) error {
-	// check to see if the payload is the correct size
-	if len(p) != int(b.CSize) {
-		return errors.New("payload size does not match compressed size value")
+func (fw *FrameWriter) WriteBlock(b Block, payload io.Reader) error {
+	if payload == nil {
+		if b.CSize > 0 {
+			return errors.New("nil payload but compressed size is non-zero")
+		}
+		payload = bytes.NewReader(nil)
 	}
 	// build block header
 	err := WriteBlock(fw, b)
 	if err != nil {
 		return err
 	}
-	// append the payload to the block
-	_, err = fw.Writer.Write(p)
+	// check for zero length
+	if b.CSize == 0 {
+		return nil
+	}
+	// copy the payload to the writer
+	n, err := io.CopyN(fw.Writer, payload, int64(b.CSize))
+	if err != nil {
+		return err
+	}
+	// check to see if the payload is the correct size
+	if n != int64(b.CSize) {
+		return errors.New("payload size does not match compressed size value")
+	}
 	return err
 }
