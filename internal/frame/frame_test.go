@@ -57,3 +57,22 @@ func TestWriteRead(t *testing.T) {
 		}
 	}
 }
+
+func TestBlockValid(t *testing.T) {
+	var badBlock Block
+	badBlock = Block{BlockType: 4}
+	err := badBlock.Valid()
+	if err == nil {
+		t.Fatalf("Missed invalid blocktype")
+	}
+	badBlock = Block{BlockType: DefaultCodec, USize: MaxBlockSize + 1}
+	err = badBlock.Valid()
+	if err == nil {
+		t.Fatalf("Missed invalid maximum uncompressed size")
+	}
+	badBlock = Block{BlockType: DefaultCodec, USize: MaxBlockSize - 1, ChecksumMethod: 4}
+	err = badBlock.Valid()
+	if err == nil {
+		t.Fatalf("Missed invalid checksum method")
+	}
+}

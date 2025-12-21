@@ -38,15 +38,15 @@ func (bw *BitWriter) WriteBits(bits uint64, nbits uint8) error {
 	return nil
 }
 
-func (bw *BitWriter) Flush() error {
+func (bw *BitWriter) Flush() (uint8, error) {
 	// pad the bit stream to acheive valid byte length
 	padding := (8 - bw.Nbits%8) % 8
 	if padding != 0 {
 		// pad it up if necessary
 		err := bw.WriteBits(0, padding)
 		if err != nil {
-			return err
+			return padding, err
 		}
 	}
-	return nil
+	return padding, nil
 }

@@ -17,13 +17,13 @@ type Block struct {
 }
 
 func (b *Block) Valid() error {
-	if b.BlockType >= 3 {
+	if (b.BlockType != EOSCodec) && (b.BlockType != DefaultCodec) && (b.BlockType != BlockCodec) {
 		return errors.New("invalid block type found")
 	}
-	if b.CSize > MaxBlockSize {
+	if b.USize > MaxBlockSize {
 		return errors.New("invalid block size found")
 	}
-	if b.ChecksumMethod > 3 {
+	if b.ChecksumMethod > UncompressedChecksum+CompressedChecksum {
 		return errors.New("invalid checksum method found")
 	}
 	return nil
