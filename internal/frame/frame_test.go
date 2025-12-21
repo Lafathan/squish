@@ -12,8 +12,9 @@ var b0 Block = Block{BlockType: DefaultCodec, USize: 12, CSize: 12, PadBits: 0}
 var b1 Block = Block{BlockType: BlockCodec, Codec: RAW, USize: 12, CSize: 12, PadBits: 0, Checksum: 75}
 var b2 Block = Block{BlockType: DefaultCodec, USize: 12, CSize: 12, PadBits: 0, Checksum: 170}
 var b3 Block = Block{BlockType: DefaultCodec, USize: 12, CSize: 12, Checksum: 345}
+var b4 Block = Block{BlockType: DefaultCodec, USize: 12, CSize: 12, Checksum: 0}
 
-var blocks []Block = []Block{b0, b1, b2, b3}
+var blocks []Block = []Block{b0, b1, b2, b3, b4}
 
 var payloadStr string = "Hello World!"
 
@@ -40,7 +41,7 @@ func TestWriteRead(t *testing.T) {
 	if fr.Header != h {
 		t.Fatalf("Header mismatch in WriteRead test\n%s\n%s", h, fr.Header)
 	}
-	for i := range len(blocks) {
+	for i := range len(blocks) - 1 {
 		block, payloadReader, err := fr.Next()
 		if err != nil {
 			t.Fatalf("Failed to read block %d: %v", i, err)
@@ -55,6 +56,16 @@ func TestWriteRead(t *testing.T) {
 		if string(bytes) != payloadStr {
 			t.Fatalf("Mismatch in payload data in block %d", i)
 		}
+	}
+	_, _, err = fr.Next()
+	if err != nil {
+		t.Fatalf("Failed to read block %d: %v", len(blocks), err)
+	}
+	_, _, err = fr.Next()
+	if err == nil {
+		t.Fatalf("Missed early read error")
+	} else if err.Error() != "early read, previous payload still active" {
+		t.Fatalf("Missed early read error: %v", err)
 	}
 }
 
