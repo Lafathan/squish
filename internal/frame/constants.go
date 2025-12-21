@@ -17,11 +17,3 @@ const (
 	UncompressedChecksum
 	CompressedChecksum
 )
-
-// Header Codec constants
-const (
-	RAW = iota
-	RLE
-	HUFFMAN
-	LZ77
-)

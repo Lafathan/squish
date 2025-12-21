@@ -2,14 +2,15 @@ package frame
 
 import (
 	"io"
+	"squish/internal/codec"
 	"strings"
 	"testing"
 )
 
-var h Header = Header{Key: MagicKey, Codec: RAW, ChecksumMode: UncompressedChecksum | CompressedChecksum}
+var h Header = Header{Key: MagicKey, Codec: codec.RAW, ChecksumMode: UncompressedChecksum | CompressedChecksum}
 
 var b0 Block = Block{BlockType: DefaultCodec, USize: 12, CSize: 12, PadBits: 0}
-var b1 Block = Block{BlockType: BlockCodec, Codec: RAW, USize: 12, CSize: 12, PadBits: 0, Checksum: 75}
+var b1 Block = Block{BlockType: BlockCodec, Codec: codec.RAW, USize: 12, CSize: 12, PadBits: 0, Checksum: 75}
 var b2 Block = Block{BlockType: DefaultCodec, USize: 12, CSize: 12, PadBits: 0, Checksum: 170}
 var b3 Block = Block{BlockType: DefaultCodec, USize: 12, CSize: 12, Checksum: 345}
 var b4 Block = Block{BlockType: DefaultCodec, USize: 12, CSize: 12, Checksum: 0}
@@ -66,6 +67,10 @@ func TestWriteRead(t *testing.T) {
 		t.Fatalf("Missed early read error")
 	} else if err.Error() != "early read, previous payload still active" {
 		t.Fatalf("Missed early read error: %v", err)
+	}
+	err = fr.Drop()
+	if fr.ActivePayload != nil {
+		t.Fatalf("Failed to drop active payload")
 	}
 }
 
