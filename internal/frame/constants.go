@@ -4,20 +4,16 @@ const MagicKey = "SQSH"
 const MaxBlockSize = uint64(1<<32 - 1)
 const ChecksumSize = 4
 
-// Header Flag constants
-const (
-	NoGlobalChecksum uint8 = 1 << iota
-	GlobalChecksum
-)
-
+// Block types
 const (
 	EOSCodec = iota
 	DefaultCodec
 	BlockCodec
 )
 
+// Header Flag constants
 const (
-	NoCheckSum = iota
+	NoChecksum = iota
 	UncompressedChecksum
 	CompressedChecksum
 )

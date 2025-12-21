@@ -6,12 +6,12 @@ import (
 	"testing"
 )
 
-var h Header = Header{Key: MagicKey, Flags: 0x00, Codec: RAW, ChecksumMode: NoGlobalChecksum}
+var h Header = Header{Key: MagicKey, Flags: 0x00, Codec: RAW, ChecksumMode: UncompressedChecksum | CompressedChecksum}
 
-var b0 Block = Block{BlockType: DefaultCodec, USize: 12, CSize: 12, PadBits: 0, ChecksumMethod: NoCheckSum}
-var b1 Block = Block{BlockType: BlockCodec, Codec: RAW, USize: 12, CSize: 12, PadBits: 0, ChecksumMethod: UncompressedChecksum, Checksum: 75}
-var b2 Block = Block{BlockType: DefaultCodec, USize: 12, CSize: 12, PadBits: 0, ChecksumMethod: CompressedChecksum, Checksum: 170}
-var b3 Block = Block{BlockType: DefaultCodec, USize: 12, CSize: 12, ChecksumMethod: CompressedChecksum | UncompressedChecksum, Checksum: 345}
+var b0 Block = Block{BlockType: DefaultCodec, USize: 12, CSize: 12, PadBits: 0}
+var b1 Block = Block{BlockType: BlockCodec, Codec: RAW, USize: 12, CSize: 12, PadBits: 0, Checksum: 75}
+var b2 Block = Block{BlockType: DefaultCodec, USize: 12, CSize: 12, PadBits: 0, Checksum: 170}
+var b3 Block = Block{BlockType: DefaultCodec, USize: 12, CSize: 12, Checksum: 345}
 
 var blocks []Block = []Block{b0, b1, b2, b3}
 
@@ -31,7 +31,6 @@ func TestWriteRead(t *testing.T) {
 		}
 	}
 	fw.Close()
-
 	fr := NewFrameReader(strings.NewReader(str.String()))
 	err = fr.Ready()
 	if err != nil {
@@ -58,6 +57,20 @@ func TestWriteRead(t *testing.T) {
 	}
 }
 
+func TestHeaderValid(t *testing.T) {
+	var badHeader Header
+	badHeader = Header{Key: "SQSh"}
+	err := badHeader.Valid()
+	if err == nil {
+		t.Fatalf("Missed invalid magic key")
+	}
+	badHeader = Header{Key: MagicKey, ChecksumMode: 4}
+	err = badHeader.Valid()
+	if err == nil {
+		t.Fatalf("Missed invalid maximum uncompressed size")
+	}
+}
+
 func TestBlockValid(t *testing.T) {
 	var badBlock Block
 	badBlock = Block{BlockType: 4}
@@ -69,10 +82,5 @@ func TestBlockValid(t *testing.T) {
 	err = badBlock.Valid()
 	if err == nil {
 		t.Fatalf("Missed invalid maximum uncompressed size")
-	}
-	badBlock = Block{BlockType: DefaultCodec, USize: MaxBlockSize - 1, ChecksumMethod: 4}
-	err = badBlock.Valid()
-	if err == nil {
-		t.Fatalf("Missed invalid checksum method")
 	}
 }

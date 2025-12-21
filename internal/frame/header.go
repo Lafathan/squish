@@ -10,13 +10,16 @@ type Header struct {
 	Key          string // "SQSH" Magic string marking the start of a header
 	Flags        uint8  // flags to determine processing
 	Codec        uint8  // default codec used
-	ChecksumMode uint8  // stream checksum mode
+	ChecksumMode uint8  // per block checksum mode
 }
 
 func (h *Header) Valid() error {
 	// make sure the header starts with the valid start key
 	if h.Key != MagicKey {
 		return errors.New("invalid header start key")
+	}
+	if h.ChecksumMode > UncompressedChecksum+CompressedChecksum {
+		return errors.New("invalid checksum method found")
 	}
 	return nil
 }

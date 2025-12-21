@@ -7,13 +7,12 @@ import (
 )
 
 type Block struct {
-	BlockType      uint8  // 0x00 EOS, 0x01 Default codec, 0x02 Block codec
-	Codec          uint8  // only used if BlockType == 0x02
-	USize          uint64 // uncompressed size
-	CSize          uint64 // compressed size
-	PadBits        uint8  // padded bits (only present for codec that might not end on byte boundary)
-	ChecksumMethod uint8  // Checksum - uncompressed (0x01), compressed (0x02), both, or none
-	Checksum       uint64 // checksum value 4 bytes for uncompressed, 4 bytes for compressed
+	BlockType uint8  // 0x00 EOS, 0x01 Default codec, 0x02 Block codec
+	Codec     uint8  // only used if BlockType == 0x02
+	USize     uint64 // uncompressed size
+	CSize     uint64 // compressed size
+	PadBits   uint8  // padded bits (only present for codec that might not end on byte boundary)
+	Checksum  uint64 // checksum value 4 bytes for uncompressed, 4 bytes for compressed
 }
 
 func (b *Block) Valid() error {
@@ -22,9 +21,6 @@ func (b *Block) Valid() error {
 	}
 	if b.USize > MaxBlockSize {
 		return errors.New("invalid block size found")
-	}
-	if b.ChecksumMethod > UncompressedChecksum+CompressedChecksum {
-		return errors.New("invalid checksum method found")
 	}
 	return nil
 }
@@ -35,7 +31,6 @@ func (b Block) String() string {
 	s += fmt.Sprintf("USize:          %d\n", b.USize)
 	s += fmt.Sprintf("CSize:          %d\n", b.CSize)
 	s += fmt.Sprintf("Padded Bits:    %d\n", b.PadBits)
-	s += fmt.Sprintf("ChecksumMethod: %d\n", b.ChecksumMethod)
 	s += fmt.Sprintf("Checksum:       %012x\n", b.Checksum)
 	return s
 }
@@ -79,18 +74,12 @@ func ReadBlock(fr *FrameReader) (Block, error) {
 		return b, err
 	}
 
-	// read the checksum method
-	b.ChecksumMethod, err = fr.ReadByte()
-	if err != nil {
-		return b, err
-	}
-
 	// read the checksum data according to the method
 	byteLength := 0
-	if b.ChecksumMethod&UncompressedChecksum != 0x00 {
+	if fr.Header.ChecksumMode&UncompressedChecksum != 0x00 {
 		byteLength += ChecksumSize
 	}
-	if b.ChecksumMethod&CompressedChecksum != 0x00 {
+	if fr.Header.ChecksumMode&CompressedChecksum != 0x00 {
 		byteLength += ChecksumSize
 	}
 	if byteLength > 0 {
@@ -120,9 +109,8 @@ func WriteBlock(fw *FrameWriter, b Block) error {
 	bytes = binary.AppendUvarint(bytes, b.USize)
 	bytes = binary.AppendUvarint(bytes, b.CSize)
 	bytes = append(bytes, b.PadBits)
-	bytes = append(bytes, b.ChecksumMethod)
-	hasUCS := b.ChecksumMethod&UncompressedChecksum != 0
-	hasCCS := b.ChecksumMethod&CompressedChecksum != 0
+	hasUCS := fw.Header.ChecksumMode&UncompressedChecksum != 0
+	hasCCS := fw.Header.ChecksumMode&CompressedChecksum != 0
 	if hasUCS && hasCCS {
 		bytes = binary.BigEndian.AppendUint64(bytes, b.Checksum)
 	} else if hasUCS || hasCCS {
