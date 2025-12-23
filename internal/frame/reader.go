@@ -47,6 +47,18 @@ func (fr *FrameReader) Next() (Block, io.Reader, error) {
 	return block, fr.ActivePayload, nil
 }
 
+func (fr *FrameReader) Drop() error {
+	// drop current payload
+	if fr.ActivePayload != nil && fr.ActivePayload.N > 0 {
+		_, err := io.Copy(io.Discard, fr.ActivePayload)
+		if err != nil {
+			return err
+		}
+	}
+	fr.ActivePayload = nil
+	return nil
+}
+
 func (fr *FrameReader) ReadBytes(n int) ([]byte, error) {
 	// read n bytes from a FrameReader stream
 	bytes := make([]byte, n)
