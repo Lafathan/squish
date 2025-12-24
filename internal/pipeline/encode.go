@@ -8,7 +8,7 @@ import (
 	"squish/internal/frame"
 )
 
-func Encode(src io.Reader, dst io.Writer, codecID uint8, blockSize int64, checksumMode uint8) error {
+func Encode(src io.Reader, dst io.Writer, codecID uint8, blockSize uint64, checksumMode uint8) error {
 	header := frame.Header{ // build your header
 		Key:          frame.MagicKey,
 		Flags:        0x00,
@@ -20,9 +20,9 @@ func Encode(src io.Reader, dst io.Writer, codecID uint8, blockSize int64, checks
 	if err != nil {
 		return err
 	}
-	defer fw.Close()                                      // defer the close to write EOS block
-	blockSize = min(blockSize, int64(frame.MaxBlockSize)) // validate blockSize first
-	uncompressed := make([]byte, blockSize)               // make a buffer to hold uncompressed data
+	defer fw.Close()                               // defer the close to write EOS block
+	blockSize = min(blockSize, frame.MaxBlockSize) // validate blockSize first
+	uncompressed := make([]byte, blockSize)        // make a buffer to hold uncompressed data
 	for {
 		in, err := io.ReadFull(src, uncompressed) // read in the src data into uncompressed
 		if err == io.EOF || in == 0 {

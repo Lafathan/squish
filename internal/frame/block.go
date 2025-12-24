@@ -38,18 +38,15 @@ func (b Block) String() string {
 func ReadBlock(fr *FrameReader) (Block, error) {
 	var b Block
 	var err error
-
 	// get block type
 	b.BlockType, err = fr.ReadByte()
 	if err != nil {
 		return b, fmt.Errorf("Error in reading block type: %v", err)
 	}
-
 	// return if EOS block
 	if b.BlockType == EOS {
 		return b, nil
 	}
-
 	// read the codec if there is a block specific one
 	if b.BlockType == BlockCodec {
 		b.Codec, err = fr.ReadByte()
@@ -57,7 +54,6 @@ func ReadBlock(fr *FrameReader) (Block, error) {
 			return b, fmt.Errorf("Error in reading block codec: %v", err)
 		}
 	}
-
 	// read and assign the varint sizes
 	b.USize, err = binary.ReadUvarint(fr)
 	if err != nil {
@@ -67,13 +63,11 @@ func ReadBlock(fr *FrameReader) (Block, error) {
 	if err != nil {
 		return b, fmt.Errorf("Error in reading block compressed size: %v", err)
 	}
-
 	// read how many padding bits are used
 	b.PadBits, err = fr.ReadByte()
 	if err != nil {
 		return b, fmt.Errorf("Error in reading block padded bits: %v", err)
 	}
-
 	// read the checksum data according to the method
 	byteLength := 0
 	if fr.Header.ChecksumMode&UncompressedChecksum != 0x00 {
