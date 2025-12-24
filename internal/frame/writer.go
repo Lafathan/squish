@@ -3,6 +3,7 @@ package frame
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 )
 
@@ -12,18 +13,17 @@ type FrameWriter struct {
 }
 
 func NewFrameWriter(w io.Writer, h Header) *FrameWriter {
-	// create a FrameWriter from an io writer stream
 	return &FrameWriter{Writer: w, Header: h}
 }
 
 func (fw *FrameWriter) Ready() error {
-	// write the bytes to the stream
+	// write the header bytes to the stream
 	return WriteHeader(fw.Writer, fw.Header)
 }
 
 func (fw *FrameWriter) Close() error {
 	// write an EOS block to the stream
-	return fw.WriteBlock(Block{BlockType: EOSCodec, CSize: 0}, nil)
+	return fw.WriteBlock(Block{BlockType: EOS, CSize: 0}, nil)
 }
 
 func (fw *FrameWriter) WriteBlock(b Block, payload io.Reader) error {
@@ -36,7 +36,7 @@ func (fw *FrameWriter) WriteBlock(b Block, payload io.Reader) error {
 	// build block header
 	err := WriteBlock(fw, b)
 	if err != nil {
-		return err
+		return fmt.Errorf("frame error when writing header: %v", err)
 	}
 	// check for zero length
 	if b.CSize == 0 {
@@ -45,7 +45,7 @@ func (fw *FrameWriter) WriteBlock(b Block, payload io.Reader) error {
 	// copy the payload to the writer
 	n, err := io.CopyN(fw.Writer, payload, int64(b.CSize))
 	if err != nil {
-		return err
+		return fmt.Errorf("error when copying payload to frame writer: %v", err)
 	}
 	// check to see if the payload is the correct size
 	if n != int64(b.CSize) {

@@ -16,6 +16,6 @@ var CodecMap = map[uint8]Codec{
 
 // codec interface
 type Codec interface {
-	EncodeBlock(src *[]byte) (dst []byte, padBits uint8, err error)
-	DecodeBlock(src *[]byte, padBits uint8) (dst []byte, err error)
+	EncodeBlock(src []byte) (dst []byte, padBits uint8, err error)
+	DecodeBlock(src []byte, padBits uint8) (dst []byte, err error)
 }

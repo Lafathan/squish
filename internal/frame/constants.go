@@ -6,7 +6,7 @@ const ChecksumSize = 4
 
 // Block types
 const (
-	EOSCodec = iota
+	EOS = iota
 	DefaultCodec
 	BlockCodec
 )

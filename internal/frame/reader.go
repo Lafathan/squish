@@ -2,6 +2,7 @@ package frame
 
 import (
 	"errors"
+	"fmt"
 	"io"
 )
 
@@ -12,7 +13,6 @@ type FrameReader struct {
 }
 
 func NewFrameReader(r io.Reader) *FrameReader {
-	// create an empty header for now
 	return &FrameReader{Reader: r}
 }
 
@@ -20,7 +20,7 @@ func (fr *FrameReader) Ready() error {
 	// read in the header of the frame
 	header, err := ReadHeader(fr.Reader)
 	if err != nil {
-		return err
+		return fmt.Errorf("frame error when reading header: %v", err)
 	}
 	fr.Header = header
 	return fr.Header.Valid()
@@ -34,7 +34,7 @@ func (fr *FrameReader) Next() (Block, io.Reader, error) {
 	// read in the block header
 	block, err := ReadBlock(fr)
 	if err != nil {
-		return block, nil, err
+		return block, nil, fmt.Errorf("frame error when reading block: %v", err)
 	}
 	// validity check
 	blockError := block.Valid()
@@ -52,7 +52,7 @@ func (fr *FrameReader) Drop() error {
 	if fr.ActivePayload != nil && fr.ActivePayload.N > 0 {
 		_, err := io.Copy(io.Discard, fr.ActivePayload)
 		if err != nil {
-			return err
+			return fmt.Errorf("frame error when skipping payload: %v", err)
 		}
 	}
 	fr.ActivePayload = nil
@@ -63,7 +63,10 @@ func (fr *FrameReader) ReadBytes(n int) ([]byte, error) {
 	// read n bytes from a FrameReader stream
 	bytes := make([]byte, n)
 	_, err := io.ReadFull(fr.Reader, bytes)
-	return bytes, err
+	if err != nil {
+		return bytes, fmt.Errorf("frame error when reading %d bits: %v", n, err)
+	}
+	return bytes, nil
 }
 
 func (fr *FrameReader) ReadByte() (byte, error) {

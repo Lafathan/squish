@@ -1,6 +1,7 @@
 package bitio
 
 import (
+	"fmt"
 	"io"
 )
 
@@ -11,32 +12,30 @@ type BitReader struct {
 }
 
 func NewBitReader(r io.Reader) *BitReader {
-	// creates a bit reader from an io reader stream
 	return &BitReader{Reader: r}
 }
 
 func (br *BitReader) ReadBits(bits uint8) (uint64, error) {
-	// if not enough bits are in the buffer, read enough bytes to have enough
+	// read more bytes to have enough bits
 	if br.Nbits < bits {
 		// calculate the number of bytes needed
 		bytesToRead := (int(bits) - int(br.Nbits) + 7) / 8
-		// return if trying to read too many bytes at once
+		// return if reading too many bytes at once
 		if int(br.Nbits)+bytesToRead*8 > 64 {
-			return 0, io.ErrShortBuffer
+			return 0, fmt.Errorf("bitreader error when reading %d bytes: %v", bytesToRead, io.ErrShortBuffer)
 		}
 		bytesBuffer := make([]byte, bytesToRead)
 		_, err := io.ReadFull(br.Reader, bytesBuffer)
 		if err != nil {
-			return 0, err
+			return 0, fmt.Errorf("bitreader error when reading %d bytes: %v", bytesToRead, err)
 		}
 		for _, b := range bytesBuffer {
-			// pad the buffer and or it to "append" the new byte to the buffer
+			// pad the buffer and 'or' it add the new byte to the buffer
 			br.Buffer = (br.Buffer << 8) | uint64(b)
 			// add to the total of bits contained in the buffer
 			br.Nbits += 8
 		}
 	}
-
 	// you want 6 bits
 	// buffer = 10
 	// buffer = 1011001100 (read in another byte)
@@ -52,8 +51,6 @@ func (br *BitReader) ReadBits(bits uint8) (uint64, error) {
 		mask = (uint64(1) << bits) - 1
 	}
 	out := (br.Buffer >> (br.Nbits - bits)) & mask
-
-	// count down to not re-read bits
-	br.Nbits -= bits
+	br.Nbits -= bits // count down to not re-read bits
 	return out, nil
 }

@@ -31,7 +31,7 @@ func Encode(src io.Reader, dst io.Writer, codecID uint8, blockSize int64, checks
 		if err != nil && err != io.ErrUnexpectedEOF {
 			return err
 		}
-		compressed, padBits, err := codec.CodecMap[codecID].EncodeBlock(&uncompressed) // encode it
+		compressed, padBits, err := codec.CodecMap[codecID].EncodeBlock(uncompressed) // encode it
 		if err != nil {
 			return err
 		}

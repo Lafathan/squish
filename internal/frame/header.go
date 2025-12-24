@@ -38,7 +38,7 @@ func ReadHeader(r io.Reader) (Header, error) {
 	bytes := make([]byte, 7)
 	_, err := io.ReadFull(r, bytes)
 	if err != nil {
-		return h, err
+		return h, fmt.Errorf("error in reading header: %v", err)
 	}
 
 	// assign values to the header of the FrameReader
@@ -57,7 +57,7 @@ func WriteHeader(w io.Writer, h Header) error {
 	// write the header so the FrameWriter is ready to start writing blocks
 	_, err := w.Write(bytes)
 	if err != nil {
-		return err
+		return fmt.Errorf("error in writing header - %s: %v", h, err)
 	}
 	return nil
 }

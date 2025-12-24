@@ -2,6 +2,7 @@ package bitio
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"math/rand"
 	"strings"
@@ -48,7 +49,7 @@ func TestShortBuffer(t *testing.T) {
 	reader := strings.NewReader("Hello World!")
 	bitReader := NewBitReader(reader)
 	_, err := bitReader.ReadBits(65)
-	if err != io.ErrShortBuffer {
+	if errors.Is(err, io.ErrShortBuffer) {
 		t.Fatalf("Failed short buffer check")
 	}
 }

@@ -16,7 +16,7 @@ type Block struct {
 }
 
 func (b *Block) Valid() error {
-	if (b.BlockType != EOSCodec) && (b.BlockType != DefaultCodec) && (b.BlockType != BlockCodec) {
+	if (b.BlockType != EOS) && (b.BlockType != DefaultCodec) && (b.BlockType != BlockCodec) {
 		return errors.New("invalid block type found")
 	}
 	if b.USize > MaxBlockSize {
@@ -42,11 +42,11 @@ func ReadBlock(fr *FrameReader) (Block, error) {
 	// get block type
 	b.BlockType, err = fr.ReadByte()
 	if err != nil {
-		return b, err
+		return b, fmt.Errorf("Error in reading block type: %v", err)
 	}
 
 	// return if EOS block
-	if b.BlockType == EOSCodec {
+	if b.BlockType == EOS {
 		return b, nil
 	}
 
@@ -54,24 +54,24 @@ func ReadBlock(fr *FrameReader) (Block, error) {
 	if b.BlockType == BlockCodec {
 		b.Codec, err = fr.ReadByte()
 		if err != nil {
-			return b, err
+			return b, fmt.Errorf("Error in reading block codec: %v", err)
 		}
 	}
 
 	// read and assign the varint sizes
 	b.USize, err = binary.ReadUvarint(fr)
 	if err != nil {
-		return b, err
+		return b, fmt.Errorf("Error in reading block uncompressed size: %v", err)
 	}
 	b.CSize, err = binary.ReadUvarint(fr)
 	if err != nil {
-		return b, err
+		return b, fmt.Errorf("Error in reading block compressed size: %v", err)
 	}
 
 	// read how many padding bits are used
 	b.PadBits, err = fr.ReadByte()
 	if err != nil {
-		return b, err
+		return b, fmt.Errorf("Error in reading block padded bits: %v", err)
 	}
 
 	// read the checksum data according to the method
@@ -85,7 +85,7 @@ func ReadBlock(fr *FrameReader) (Block, error) {
 	if byteLength > 0 {
 		cs, err := fr.ReadBytes(byteLength)
 		if err != nil {
-			return b, err
+			return b, fmt.Errorf("Error in reading block checksum: %v", err)
 		}
 		for _, csbyte := range cs {
 			b.Checksum = (b.Checksum << 8) | uint64(csbyte)
@@ -96,7 +96,7 @@ func ReadBlock(fr *FrameReader) (Block, error) {
 
 func WriteBlock(fw *FrameWriter, b Block) error {
 	// if EOS block is being written
-	if b.BlockType == EOSCodec {
+	if b.BlockType == EOS {
 		_, err := fw.Writer.Write([]byte{b.BlockType})
 		return err
 	}
@@ -119,5 +119,8 @@ func WriteBlock(fw *FrameWriter, b Block) error {
 
 	// write the bytes
 	_, err := fw.Writer.Write(bytes)
-	return err
+	if err != nil {
+		return fmt.Errorf("error in writing block - %s: %v", b, err)
+	}
+	return nil
 }
