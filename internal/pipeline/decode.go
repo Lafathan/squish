@@ -33,10 +33,11 @@ func Decode(src io.Reader, dst io.Writer) error {
 		blockCS := block.Checksum
 		if fr.Header.ChecksumMode&frame.CompressedChecksum > 0 {
 			csum := uint64(crc32.ChecksumIEEE(compressed))
-			if csum != 0xFF&blockCS {
-				return fmt.Errorf("Mismatched checksum for compressed payload: got %d; expected %d", csum, 0xFF&blockCS)
+			exp := (1<<(8*crc32.Size) - 1) & blockCS
+			if csum != exp {
+				return fmt.Errorf("Mismatched checksum for compressed payload: got %08x - expected %08x", csum, exp)
 			}
-			blockCS = blockCS >> 8
+			blockCS = blockCS >> (8 * crc32.Size)
 		}
 		currentCodec := codec.CodecMap[fr.Header.Codec] // determine the codec to use
 		if block.BlockType == frame.BlockCodec {
@@ -48,8 +49,9 @@ func Decode(src io.Reader, dst io.Writer) error {
 		}
 		if fr.Header.ChecksumMode&frame.UncompressedChecksum > 0 {
 			csum := uint64(crc32.ChecksumIEEE(uncompressed))
-			if csum != 0xFF&blockCS {
-				return fmt.Errorf("Mismatched checksum for uncompressed payload: got %d; expected %d", csum, 0xFF&blockCS)
+			exp := (1<<(8*crc32.Size) - 1) & blockCS
+			if csum != exp {
+				return fmt.Errorf("Mismatched checksum for uncompressed payload: got %08x - expected %08x", csum, exp)
 			}
 		}
 		out, err := dst.Write(uncompressed) // write it out

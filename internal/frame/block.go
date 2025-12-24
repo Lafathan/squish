@@ -32,7 +32,7 @@ func (b Block) String() string {
 	s += fmt.Sprintf("USize:          %d\n", b.USize)
 	s += fmt.Sprintf("CSize:          %d\n", b.CSize)
 	s += fmt.Sprintf("Padded Bits:    %d\n", b.PadBits)
-	s += fmt.Sprintf("Checksum:       %012x\n", b.Checksum)
+	s += fmt.Sprintf("Checksum:       %016x\n", b.Checksum)
 	return s
 }
 
