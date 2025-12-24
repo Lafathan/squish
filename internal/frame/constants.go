@@ -1,8 +1,7 @@
 package frame
 
 const MagicKey = "SQSH"
-const MaxBlockSize = uint64(1<<32 - 1)
-const ChecksumSize = 4
+const MaxBlockSize = uint64(1<<16 - 1)
 
 // Block types
 const (

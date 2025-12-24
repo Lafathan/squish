@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/crc32"
 )
 
 type Block struct {
@@ -70,11 +71,11 @@ func ReadBlock(fr *FrameReader) (Block, error) {
 	}
 	// read the checksum data according to the method
 	byteLength := 0
-	if fr.Header.ChecksumMode&UncompressedChecksum != 0x00 {
-		byteLength += ChecksumSize
-	}
 	if fr.Header.ChecksumMode&CompressedChecksum != 0x00 {
-		byteLength += ChecksumSize
+		byteLength += crc32.Size
+	}
+	if fr.Header.ChecksumMode&UncompressedChecksum != 0x00 {
+		byteLength += crc32.Size
 	}
 	if byteLength > 0 {
 		cs, err := fr.ReadBytes(byteLength)
@@ -103,8 +104,8 @@ func WriteBlock(fw *FrameWriter, b Block) error {
 	bytes = binary.AppendUvarint(bytes, b.USize)
 	bytes = binary.AppendUvarint(bytes, b.CSize)
 	bytes = append(bytes, b.PadBits)
-	hasUCS := fw.Header.ChecksumMode&UncompressedChecksum != 0
 	hasCCS := fw.Header.ChecksumMode&CompressedChecksum != 0
+	hasUCS := fw.Header.ChecksumMode&UncompressedChecksum != 0
 	if hasUCS && hasCCS {
 		bytes = binary.BigEndian.AppendUint64(bytes, b.Checksum)
 	} else if hasUCS || hasCCS {

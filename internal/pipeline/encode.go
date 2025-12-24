@@ -22,14 +22,14 @@ func Encode(src io.Reader, dst io.Writer, codecID uint8, blockSize uint64, check
 	}
 	defer fw.Close()                               // defer the close to write EOS block
 	blockSize = min(blockSize, frame.MaxBlockSize) // validate blockSize first
-	uncompressed := make([]byte, blockSize)        // make a buffer to hold uncompressed data
 	for {
-		in, err := io.ReadFull(src, uncompressed) // read in the src data into uncompressed
-		if err == io.EOF || in == 0 {
-			break
-		}
-		if err != nil && err != io.ErrUnexpectedEOF {
+		blockReader := io.LimitedReader{R: src, N: int64(blockSize)} // make a new LimitedReader
+		uncompressed, err := io.ReadAll(&blockReader)                // read it all in from the src
+		if err != nil {
 			return err
+		}
+		if len(uncompressed) == 0 {
+			break
 		}
 		compressed, padBits, err := codec.CodecMap[codecID].EncodeBlock(uncompressed) // encode it
 		if err != nil {
@@ -45,7 +45,7 @@ func Encode(src io.Reader, dst io.Writer, codecID uint8, blockSize uint64, check
 		}
 		block := frame.Block{ // build the block
 			BlockType: frame.DefaultCodec,
-			USize:     uint64(in),
+			USize:     uint64(len(uncompressed)),
 			CSize:     uint64(len(compressed)),
 			PadBits:   padBits,
 			Checksum:  checksum,
