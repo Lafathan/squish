@@ -51,7 +51,7 @@ func Decode(src io.Reader, dst io.Writer) error {
 		if err != nil {
 			return err
 		}
-		if fr.Header.ChecksumMode&frame.UncompressedChecksum > 0 {
+		if fr.Header.ChecksumMode&frame.UncompressedChecksum > 0 && currentCodec.IsLossless() {
 			csum := uint64(crc32.ChecksumIEEE(uncompressed))
 			exp := (1<<(8*crc32.Size) - 1) & blockCS
 			if csum != exp {
