@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"errors"
 	"fmt"
 	"hash/crc32"
 	"io"
@@ -39,7 +40,10 @@ func Decode(src io.Reader, dst io.Writer) error {
 			}
 			blockCS = blockCS >> (8 * crc32.Size)
 		}
-		currentCodec := codec.CodecMap[fr.Header.Codec] // determine the codec to use
+		currentCodec, ok := codec.CodecMap[fr.Header.Codec] // determine the codec to use
+		if !ok {
+			return errors.New("Invalid codec ID")
+		}
 		if block.BlockType == frame.BlockCodec {
 			currentCodec = codec.CodecMap[block.Codec]
 		}

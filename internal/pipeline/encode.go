@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"bytes"
+	"errors"
 	"hash/crc32"
 	"io"
 	"squish/internal/codec"
@@ -31,7 +32,11 @@ func Encode(src io.Reader, dst io.Writer, codecID uint8, blockSize uint64, check
 		if len(uncompressed) == 0 {
 			break
 		}
-		compressed, padBits, err := codec.CodecMap[codecID].EncodeBlock(uncompressed) // encode it
+		currentCodec, ok := codec.CodecMap[codecID]
+		if !ok {
+			return errors.New("Invalid codec ID")
+		}
+		compressed, padBits, err := currentCodec.EncodeBlock(uncompressed) // encode it
 		if err != nil {
 			return err
 		}
