@@ -2,15 +2,19 @@ package codec
 
 import "testing"
 
-func TestRAWEncode(t *testing.T) {
+func TestRAWEncodeDecode(t *testing.T) {
 	message := "Hello World!"
 	raw := RAWCodec{}
-	out, _, err := raw.EncodeBlock([]byte(message))
+	coded, pad, err := raw.EncodeBlock([]byte(message))
 	if err != nil {
 		t.Fatalf("RAW encoding failed")
 	}
-	if message != string(out) {
-		t.Fatalf("Raw encoding mismatch: got %s - expected %s", string(out), message)
+	decoded, err := raw.DecodeBlock(coded, pad)
+	if err != nil {
+		t.Fatalf("RAW Decoding failed")
+	}
+	if message != string(decoded) {
+		t.Fatalf("Raw encoding mismatch: got %s - expected %s", string(decoded), message)
 	}
 }
 

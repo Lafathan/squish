@@ -1,16 +1,22 @@
 package codec
 
-import "testing"
+import (
+	"testing"
+)
 
-func TestRLEEncode(t *testing.T) {
+func TestRLEEncodeDecode(t *testing.T) {
 	message := "Hello World! Whooooooooooooooohhhhhhhhhhhhhooooooooooooooooo!"
 	rle := RLECodec{}
-	out, _, err := rle.EncodeBlock([]byte(message))
+	coded, pad, err := rle.EncodeBlock([]byte(message))
 	if err != nil {
 		t.Fatalf("RLE encoding failed")
 	}
-	if len(out) != 36 {
-		t.Fatalf("Unexpected RLE encoding output length: got %d - expected 36", len(out))
+	decoded, err := rle.DecodeBlock(coded, pad)
+	if err != nil {
+		t.Fatalf("RLE decoding failed")
+	}
+	if message != string(decoded) {
+		t.Fatalf("Rle encoding mismatch: got %s - expected %s", string(decoded), message)
 	}
 }
 
