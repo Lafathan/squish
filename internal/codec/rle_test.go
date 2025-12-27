@@ -26,7 +26,7 @@ func TestRLEEncodeDecode(t *testing.T) {
 }
 
 func TestRLEMaxRunLength(t *testing.T) {
-	message := "aaa" + strings.Repeat("b", 300) + "cccc"
+	message := "aaa" + strings.Repeat("b", 511) + "cccc"
 	EncodeDecode(message, t)
 }
 

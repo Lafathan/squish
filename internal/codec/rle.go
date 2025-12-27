@@ -2,8 +2,10 @@ package codec
 
 import "errors"
 
-var MaxRunLength uint8 = 255
-var PairSize int = 2
+const (
+	MaxRunLength uint8 = 255
+	PairSize     int   = 2
+)
 
 type RLECodec struct{}
 
@@ -12,13 +14,14 @@ func (RLECodec) EncodeBlock(src []byte) ([]byte, uint8, error) {
 	if srcByteLength == 0 {
 		return []byte{}, 0, nil
 	}
-	outByteLength := 2           // how long will output be
+	outByteLength := PairSize    // how long will output be
 	currentRunLength := uint8(0) // keep track of the current length of run
 	currentRunByte := src[0]     // keep track of the current repeating currentRunByte
 	for _, srcByte := range src {
 		if currentRunByte != srcByte || currentRunLength >= MaxRunLength {
 			outByteLength += PairSize
 			currentRunByte = srcByte
+			currentRunLength = 1
 		} else {
 			currentRunLength += 1
 		}
@@ -53,7 +56,7 @@ func (RLECodec) DecodeBlock(src []byte, padBits uint8) ([]byte, error) {
 		return []byte{}, nil
 	}
 	if srcByteLength%PairSize != 0 {
-		return []byte{}, errors.New("Malformed RLE input for decoding")
+		return []byte{}, errors.New("malformed RLE input for decoding")
 	}
 	srcIndex := 0
 	for srcIndex < srcByteLength { // for each (count, byte) pair
