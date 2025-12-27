@@ -1,18 +1,29 @@
 package codec
 
+import "errors"
+
+var MaxRunLength uint8 = 255
+var PairSize int = 2
+
 type RLECodec struct{}
 
 func (RLECodec) EncodeBlock(src []byte) ([]byte, uint8, error) {
-	outByteLength := 2        // how long will output be
 	srcByteLength := len(src) // how long is the input
-	currentRunByte := src[0]  // keep track of the current repeating byte
+	if srcByteLength == 0 {
+		return []byte{}, 0, nil
+	}
+	outByteLength := 2           // how long will output be
+	currentRunLength := uint8(0) // keep track of the current length of run
+	currentRunByte := src[0]     // keep track of the current repeating currentRunByte
 	for _, srcByte := range src {
-		if currentRunByte != srcByte {
-			outByteLength += 2
+		if currentRunByte != srcByte || currentRunLength >= MaxRunLength {
+			outByteLength += PairSize
 			currentRunByte = srcByte
+		} else {
+			currentRunLength += 1
 		}
 	}
-	currentRunLength := uint8(0)                  // keep track of the current length of run
+	currentRunLength = 0                          // keep track of the current length of run
 	encodedMessage := make([]byte, outByteLength) // make a place to store the encoded message
 	currentRunByte = src[0]                       // keep track of the current repeating byte
 	currentEncodedLength := 0
@@ -21,7 +32,7 @@ func (RLECodec) EncodeBlock(src []byte) ([]byte, uint8, error) {
 			encodedMessage[currentEncodedLength] = currentRunLength // write the number of reapeats
 			currentEncodedLength++                                  // move to the next element
 			encodedMessage[currentEncodedLength] = currentRunByte   // write the byte repeated
-		} else if src[srcIndex] == currentRunByte && currentRunLength < uint8((1<<8)-1) {
+		} else if src[srcIndex] == currentRunByte && currentRunLength < MaxRunLength {
 			currentRunLength += 1 // increment counter if byte repeats and not over the repeat limit
 		} else {
 			encodedMessage[currentEncodedLength] = currentRunLength // write the number of reapeats
@@ -38,10 +49,16 @@ func (RLECodec) EncodeBlock(src []byte) ([]byte, uint8, error) {
 func (RLECodec) DecodeBlock(src []byte, padBits uint8) ([]byte, error) {
 	outByteLength := 0        // how long will the output be
 	srcByteLength := len(src) // how long is the input
+	if srcByteLength == 0 {
+		return []byte{}, nil
+	}
+	if srcByteLength%PairSize != 0 {
+		return []byte{}, errors.New("Malformed RLE input for decoding")
+	}
 	srcIndex := 0
 	for srcIndex < srcByteLength { // for each (count, byte) pair
 		outByteLength += int(src[srcIndex]) // count how many bytes will be added
-		srcIndex += 2                       // jump to the next pair
+		srcIndex += PairSize                // jump to the next pair
 	}
 	decodedMessage := make([]byte, outByteLength) // make the array you need for output
 	currentOutIndex := 0                          // keep track of where you are in the output
