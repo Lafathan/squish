@@ -1,5 +1,7 @@
 package codec
 
+import "container/heap"
+
 const (
 	Leaf   = 0
 	Branch = 1
@@ -7,23 +9,38 @@ const (
 
 type HUFFMANCodec struct{}
 
-type HuffmanNode struct {
+type Node struct {
 	nodeType  int // 0 is leaf, 1 is a node
-	parent    *HuffmanNode
-	value     byte            // value held by a leaf
-	frequency int             // frequency of value, or sum of frequencies of children
-	children  [2]*HuffmanNode // children if not a leaf
+	parent    *Node
+	value     byte     // value held by a leaf
+	frequency int      // frequency of value, or sum of frequencies of children
+	children  [2]*Node // children if not a leaf
 }
 
-func GetHuffmanLeaves(src []byte) []*HuffmanNode {
+type HuffmanHeap []*Node
+
+// define function required to inherit the heap interface
+func (h HuffmanHeap) Len() int           { return len(h) }
+func (h HuffmanHeap) Less(i, j int) bool { return h[i].frequency < h[j].frequency }
+func (h HuffmanHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *HuffmanHeap) Push(n any)        { *h = append(*h, n.(*Node)) }
+func (h *HuffmanHeap) Pop() any {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
+}
+
+func GetHuffmanHeap(src []byte) *HuffmanHeap {
 	if len(src) == 0 {
 		return nil
 	}
-	freqMap := map[byte]*HuffmanNode{} // build a dictionary of byte frequencies
-	for _, b := range src {            // loop through bytes
+	freqMap := map[byte]*Node{} // build a dictionary of byte frequencies
+	for _, b := range src {     // loop through bytes
 		_, ok := freqMap[b] // check for existence
 		if !ok {            // create it if it doesn't exist
-			freqMap[b] = &HuffmanNode{
+			freqMap[b] = &Node{
 				nodeType:  Leaf,
 				value:     b,
 				frequency: 0,
@@ -31,49 +48,56 @@ func GetHuffmanLeaves(src []byte) []*HuffmanNode {
 		}
 		freqMap[b].frequency++ // increment the frequency
 	}
-	leaves := make([]*HuffmanNode, len(freqMap)) // make a list of leaves
-	i := 0
+	h := &HuffmanHeap{} // build the heap from the leaf nodes
+	heap.Init(h)
 	for _, v := range freqMap {
-		leaves[i] = v
-		i++
+		heap.Push(h, v)
 	}
-	return leaves // return the list
+	return h // return the heap
 }
 
-func TreeFromLeaves(leaves []*HuffmanNode) *HuffmanNode {
-	for len(leaves) > 1 { // while you are not at the root...
-		leftChildIndex := 0
-		for i, node := range leaves { // loop through the nodes picking the smallest frequency leaf
-			if node.frequency < leaves[leftChildIndex].frequency {
-				leftChildIndex = i
-			}
-		}
-		rightChildIndex := (leftChildIndex + 1) % len(leaves) // now do it for the right child
-		for i, node := range leaves {
-			if node.frequency < leaves[rightChildIndex].frequency && i != leftChildIndex {
-				rightChildIndex = i // pick the right child ensuring it is unique to the left
-			}
-		}
-		newNode := HuffmanNode{ // build a new node containing the two children
+func GetHuffmanTree(leaves *HuffmanHeap) *Node {
+	for leaves.Len() > 1 {
+		l := heap.Pop(leaves).(*Node) // get the smallest left child node
+		r := heap.Pop(leaves).(*Node) // get the second smalleset right child node
+		newNode := Node{              // create a new parent node for those children
 			nodeType:  Branch,
-			frequency: leaves[leftChildIndex].frequency + leaves[rightChildIndex].frequency,
-			children:  [2]*HuffmanNode{leaves[leftChildIndex], leaves[rightChildIndex]},
+			frequency: l.frequency + r.frequency,
+			children:  [2]*Node{l, r},
 		}
-		leaves[leftChildIndex].parent = &newNode
-		leaves[rightChildIndex].parent = &newNode
-		maxIndex := max(leftChildIndex, rightChildIndex)           // pick the rightmost index
-		leaves = append(leaves[:maxIndex], leaves[maxIndex+1:]...) // delete it
-		minIndex := min(leftChildIndex, rightChildIndex)           // pick the leftmost index
-		leaves = append(leaves[:minIndex], leaves[minIndex+1:]...) // delete it
-		leaves = append(leaves, &newNode)                          // append the new node you created
+		l.parent = &newNode
+		r.parent = &newNode
+		heap.Push(leaves, &newNode) // push that new parent back on to the heap
 	}
-	return leaves[0]
+	return heap.Pop(leaves).(*Node)
+}
+
+type HCode struct {
+	bits   int32
+	length uint8
+}
+
+func GetHuffmanDictionary(tree *Node) map[byte]*HCode {
+	dict := map[byte]*HCode{} // store the byte - code pairs
+	curHCode := HCode{bits: 0, length: 0}
+	var getCode func(n *Node, c *HCode) // define a func for recursive depth first search
+	getCode = func(n *Node, c *HCode) {
+		if n.nodeType == Leaf {
+			dict[n.value] = c // update the dictionary when you arrive at a leaf
+		} else {
+			getCode(n.children[0], &HCode{bits: c.bits << 1, length: c.length + 1}) // recurse for children
+			getCode(n.children[1], &HCode{bits: c.bits<<1 | 1, length: c.length + 1})
+		}
+	}
+	getCode(tree, &curHCode)
+	return dict
 }
 
 func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, uint8, error) {
-	unsortedLeaves := GetHuffmanLeaves(src)
-	huffmanTree := TreeFromLeaves(unsortedLeaves)
-	print(huffmanTree)
+	h := GetHuffmanHeap(src)
+	t := GetHuffmanTree(h)
+	d := GetHuffmanDictionary(t)
+	print(d)
 	return src, 0, nil
 }
 
