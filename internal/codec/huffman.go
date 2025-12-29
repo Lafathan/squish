@@ -1,6 +1,11 @@
 package codec
 
-import "container/heap"
+import (
+	"bytes"
+	"container/heap"
+	"encoding/binary"
+	"squish/internal/bitio"
+)
 
 const (
 	Leaf   = 0
@@ -10,11 +15,15 @@ const (
 type HUFFMANCodec struct{}
 
 type Node struct {
-	nodeType  int // 0 is leaf, 1 is a node
-	parent    *Node
+	nodeType  int      // 0 is leaf, 1 is a node
 	value     byte     // value held by a leaf
 	frequency int      // frequency of value, or sum of frequencies of children
 	children  [2]*Node // children if not a leaf
+}
+
+type HCode struct {
+	bits   uint32
+	length uint8
 }
 
 type HuffmanHeap []*Node
@@ -65,16 +74,9 @@ func GetHuffmanTree(leaves *HuffmanHeap) *Node {
 			frequency: l.frequency + r.frequency,
 			children:  [2]*Node{l, r},
 		}
-		l.parent = &newNode
-		r.parent = &newNode
 		heap.Push(leaves, &newNode) // push that new parent back on to the heap
 	}
 	return heap.Pop(leaves).(*Node)
-}
-
-type HCode struct {
-	bits   int32
-	length uint8
 }
 
 func GetHuffmanDictionary(tree *Node) map[byte]*HCode {
@@ -93,12 +95,38 @@ func GetHuffmanDictionary(tree *Node) map[byte]*HCode {
 	return dict
 }
 
+func SerializeHuffmanDictionary(d map[byte]*HCode) []byte {
+	// byte value, uint32 code, uint8 bit length - all 0's mark the end of the table
+	out := []byte{}
+	for k, v := range d {
+		out = append(out, k)
+		out = binary.BigEndian.AppendUint32(out, v.bits)
+		out = append(out, v.length)
+	}
+	out = append(out, byte(0))
+	out = binary.BigEndian.AppendUint32(out, 0)
+	out = append(out, byte(0))
+	return out
+}
+
 func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, uint8, error) {
 	h := GetHuffmanHeap(src)
 	t := GetHuffmanTree(h)
 	d := GetHuffmanDictionary(t)
-	print(d)
-	return src, 0, nil
+	outBuffer := new(bytes.Buffer)
+	_, err := outBuffer.Write(SerializeHuffmanDictionary(d))
+	bw := bitio.NewBitWriter(outBuffer)
+	for _, b := range src {
+		err := bw.WriteBits(uint64(d[b].bits), d[b].length)
+		if err != nil {
+			return []byte{}, 0, err
+		}
+	}
+	pad, err := bw.Flush()
+	if err != nil {
+		return []byte{}, 0, err
+	}
+	return outBuffer.Bytes(), pad, nil
 }
 
 func (HUFFMANCodec) DecodeBlock(src []byte, padBits uint8) ([]byte, error) {
