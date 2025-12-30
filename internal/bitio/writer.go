@@ -39,6 +39,33 @@ func (bw *BitWriter) WriteBits(bits uint64, nbits uint8) error {
 	return nil
 }
 
+func (bw *BitWriter) WriteBitsFromSlice(byteSlice []byte, nbits uint8) error {
+	// writes n bits to a writer from a byte array
+	// []byte{00110011, 00001111} with nbits 13 -> 11100110011
+	// note: lower index is less significant
+	if int(nbits) > 8*len(byteSlice) {
+		return fmt.Errorf("Too many bits to write from byte slice")
+	}
+	// determine which element in the slice to start on
+	byteIndex := (nbits - 1) / 8
+	// preempt writing 8 bits per byte
+	bitLength := uint8(8)
+	// write all the full bytes
+	for byteIndex > 0 {
+		err := bw.WriteBits(uint64(byteSlice[byteIndex]), bitLength)
+		if err != nil {
+			return fmt.Errorf("bitwriter error when writing byte slice: %v", err)
+		}
+		byteIndex--
+	}
+	// write the remaining bits of the last byte
+	err := bw.WriteBits(uint64(byteSlice[byteIndex]), nbits%8)
+	if err != nil {
+		return fmt.Errorf("bitwriter error when writing byte slice: %v", err)
+	}
+	return nil
+}
+
 func (bw *BitWriter) Flush() (uint8, error) {
 	// pad the bit stream to acheive valid byte length
 	padding := (8 - bw.Nbits%8) % 8

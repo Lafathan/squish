@@ -15,11 +15,11 @@ func NewBitReader(r io.Reader) *BitReader {
 	return &BitReader{Reader: r}
 }
 
-func (br *BitReader) ReadBits(bits uint8) (uint64, error) {
+func (br *BitReader) ReadBits(nbits uint8) (uint64, error) {
 	// read more bytes to have enough bits
-	if br.Nbits < bits {
+	if br.Nbits < nbits {
 		// calculate the number of bytes needed
-		bytesToRead := (int(bits) - int(br.Nbits) + 7) / 8
+		bytesToRead := (int(nbits) - int(br.Nbits) + 7) / 8
 		// return if reading too many bytes at once
 		if int(br.Nbits)+bytesToRead*8 > 64 {
 			return 0, fmt.Errorf("bitreader error when reading %d bytes: %v", bytesToRead, io.ErrShortBuffer)
@@ -45,12 +45,12 @@ func (br *BitReader) ReadBits(bits uint8) (uint64, error) {
 	// and with mask  =     111111 (prevent high bits from leaking through)
 	// result         =     101100var mask uint64
 	var mask uint64
-	if bits == 64 {
+	if nbits == 64 {
 		mask = ^uint64(0)
 	} else {
-		mask = (uint64(1) << bits) - 1
+		mask = (uint64(1) << nbits) - 1
 	}
-	out := (br.Buffer >> (br.Nbits - bits)) & mask
-	br.Nbits -= bits // count down to not re-read bits
+	out := (br.Buffer >> (br.Nbits - nbits)) & mask
+	br.Nbits -= nbits // count down to not re-read bits
 	return out, nil
 }
