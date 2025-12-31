@@ -3,7 +3,6 @@ package bitio
 import (
 	"fmt"
 	"io"
-	"math"
 )
 
 type BitReader struct {
@@ -17,35 +16,41 @@ func NewBitReader(r io.Reader) *BitReader {
 }
 
 func (br *BitReader) ReadBits(nbits int) ([]byte, error) {
-	bytesBuffer := make([]byte, (nbits-1)/8+1)
-	bytes := make([]byte, int(math.Ceil(float64(max(0, nbits-br.Nbits)/8))))
-	_, err := io.ReadFull(br.Reader, bytes)
-	if err != nil {
-		return bytesBuffer, fmt.Errorf("bitreader error when reading %d bytes: %v", len(bytesBuffer), err)
-	}
-	for i, b := range bytes {
-		// if old and new bits to be read are over a byte
-		if nbits-8*i > 8 {
-			// left shift buffer to make room for LSB of right shifted current byte
-			br.Buffer = (br.Buffer << (8 - br.Nbits)) | (b >> br.Nbits)
-			// add the new byte to the writing buffer
-			bytesBuffer[i] = br.Buffer
-			// the new buffer is what you didn't write from current byte
-			br.Buffer = b & (1<<br.Nbits - 1)
-		} else {
-			// left shift buffer to make room for LSB of right shifted current byte
-			br.Buffer = (br.Buffer << (8 - br.Nbits)) | (b >> br.Nbits)
-			// add the new byte to the writing buffer
-			bytesBuffer[i] = br.Buffer
-			// the new buffer is what you didn't write from current byte
-			br.Buffer = b & (1<<br.Nbits - 1)
-			// calculate your new Nbits
-			br.Nbits = (br.Nbits + nbits) % 8
-			//// store the remaining bits if they fit in the buffer
-			//bytesBuffer[i] = (br.Buffer << (nbits % 8)) | (b >> (nbits % 8))
-			//br.Buffer = b & (1<<(nbits%8) - 1)
-			//br.Nbits = (nbits - br.Nbits) % 8
+	byteBuffer := make([]byte, (nbits-1)/8+1)
+	if nbits <= br.Nbits {
+		// easy case - all required bits are already in the buffer
+		byteBuffer[0] = br.Buffer >> (br.Nbits - nbits) // put the bits in the output
+		br.Buffer &= (1<<(br.Nbits-nbits) - 1)          // shift the buffer by how many wanted
+		br.Nbits -= nbits                               // track how many are still unread
+	} else {
+		// harder case - more bytes are required to be read in
+		bytes := make([]byte, (nbits-br.Nbits+7)/8)
+		_, err := io.ReadFull(br.Reader, bytes)
+		if err != nil {
+			return byteBuffer, fmt.Errorf("bitreader error when reading %d bytes: %v", len(byteBuffer), err)
+		}
+		rem := nbits % 8 // get the remainder of bits desired for the MSByte
+		if rem == 0 {
+			rem = 8
+		}
+		idx := 0 // track where you are in the output
+		for _, b := range bytes {
+			if br.Nbits >= rem {
+				// when the entire leading MSB is contained in the buffer bits
+				shift := br.Nbits - rem              // determine shift required to take just enough from buffer
+				byteBuffer[idx] = br.Buffer >> shift // add MSB to output
+				br.Buffer &= (1<<shift - 1)          // make out what you read frombuffer
+				br.Nbits = shift                     // reduce unread bits by what you read from buffer
+				rem = 8                              // all future output bytes will be 8 bits
+				idx++                                // increment your output index
+			}
+			shift := rem - br.Nbits                                     // determine shift required to take enough from buffer
+			byteBuffer[idx] = (br.Buffer << shift) | (b >> (8 - shift)) // shift buffer and append from MSb from read byte
+			br.Buffer = b & (1<<(8-shift) - 1)                          // the new buffer is the tail LSb of the read byte
+			br.Nbits = 8 - shift                                        // unread bits is updated
+			rem = 8                                                     // all future output bytes will be 8 bits
+			idx++                                                       // increment your output index
 		}
 	}
-	return bytesBuffer, nil
+	return byteBuffer, nil
 }
