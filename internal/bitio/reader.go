@@ -3,6 +3,7 @@ package bitio
 import (
 	"fmt"
 	"io"
+	"math"
 )
 
 type BitReader struct {
@@ -16,26 +17,35 @@ func NewBitReader(r io.Reader) *BitReader {
 }
 
 func (br *BitReader) ReadBits(nbits int) ([]byte, error) {
-	bytesBuffer := make([]byte, (br.Nbits + nbits - 1) / 8 + 1)
-	bytes := make([]byte, (nbits - br.Nbits - 1) / 8 + 1)
-	_, err := io.ReadFull(br.Reader, readBytes)
+	bytesBuffer := make([]byte, (nbits-1)/8+1)
+	bytes := make([]byte, int(math.Ceil(float64(max(0, nbits-br.Nbits)/8))))
+	_, err := io.ReadFull(br.Reader, bytes)
 	if err != nil {
 		return bytesBuffer, fmt.Errorf("bitreader error when reading %d bytes: %v", len(bytesBuffer), err)
 	}
 	for i, b := range bytes {
 		// if old and new bits to be read are over a byte
-		if br.Nbits + nbits - 8 * i > 8 {
+		if nbits-8*i > 8 {
 			// left shift buffer to make room for LSB of right shifted current byte
-			br.Buffer = (br.Buffer << (8 - br.Nbits)) | (b >> br.Nbits) 
+			br.Buffer = (br.Buffer << (8 - br.Nbits)) | (b >> br.Nbits)
 			// add the new byte to the writing buffer
-			bytesBuffer[i] = br.Buffer 
+			bytesBuffer[i] = br.Buffer
 			// the new buffer is what you didn't write from current byte
-			bw.Buffer = b & (1 << br.Nbits - 1) 
+			br.Buffer = b & (1<<br.Nbits - 1)
 		} else {
-			// store the remaining bits if they fit in the buffer
-			br.Buffer = (br.Buffer << nbits % 8) | b
+			// left shift buffer to make room for LSB of right shifted current byte
+			br.Buffer = (br.Buffer << (8 - br.Nbits)) | (b >> br.Nbits)
+			// add the new byte to the writing buffer
+			bytesBuffer[i] = br.Buffer
+			// the new buffer is what you didn't write from current byte
+			br.Buffer = b & (1<<br.Nbits - 1)
+			// calculate your new Nbits
+			br.Nbits = (br.Nbits + nbits) % 8
+			//// store the remaining bits if they fit in the buffer
+			//bytesBuffer[i] = (br.Buffer << (nbits % 8)) | (b >> (nbits % 8))
+			//br.Buffer = b & (1<<(nbits%8) - 1)
+			//br.Nbits = (nbits - br.Nbits) % 8
 		}
-		br.Nbits = (br.Nbits + nbits % 8) % 8
 	}
 	return bytesBuffer, nil
 }

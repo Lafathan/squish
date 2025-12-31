@@ -19,21 +19,21 @@ func (bw *BitWriter) WriteBits(bytes []byte, nbits int) error {
 	if nbits > 8*len(bytes) {
 		return fmt.Errorf("bitwriter error: not enough bits in byte slice")
 	}
-	bytesBuffer := make([]byte, (bw.Nbits + nbits - 1) / 8 + 1)
-	for i, b := range bytes
+	bytesBuffer := make([]byte, (bw.Nbits+nbits-1)/8+1)
+	for i, b := range bytes {
 		// if old and new bits to be written are over a byte
-		if bw.Nbits + nbits - 8 * i >= 8 { 
+		if bw.Nbits+nbits-8*i >= 8 {
 			// left shift buffer to make room for LSB of right shifted current byte
 			bw.Buffer = (bw.Buffer << (8 - bw.Nbits)) | (b >> bw.Nbits)
 			// add the new byte to the writing buffer
-			bytesBuffer[i] = bw.Buffer 
+			bytesBuffer[i] = bw.Buffer
 			// the new buffer is what you didn't write from current byte
-			bw.Buffer = b & (1 << bw.Nbits - 1) 
+			bw.Buffer = b & (1<<bw.Nbits - 1)
 		} else {
 			// store the remaining bits if they fit in the buffer
 			bw.Buffer = (bw.Buffer << nbits % 8) | b
 		}
-		bw.Nbits = (bw.Nbits + nbits % 8) % 8
+		bw.Nbits = (bw.Nbits + nbits%8) % 8
 	}
 	_, err := bw.Writer.Write(bytesBuffer) // write the bytes
 	if err != nil {
