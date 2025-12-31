@@ -16,28 +16,46 @@ func NewBitWriter(w io.Writer) *BitWriter {
 }
 
 func (bw *BitWriter) WriteBits(bytes []byte, nbits int) error {
-	if nbits > 8*len(bytes) {
+	if nbits-bw.Nbits > 8*len(bytes) {
 		return fmt.Errorf("bitwriter error: not enough bits in byte slice")
 	}
-	bytesBuffer := make([]byte, (bw.Nbits+nbits-1)/8+1)
-	for i, b := range bytes {
-		// if old and new bits to be written are over a byte
-		if bw.Nbits+nbits-8*i >= 8 {
-			// left shift buffer to make room for LSB of right shifted current byte
-			bw.Buffer = (bw.Buffer << (8 - bw.Nbits)) | (b >> bw.Nbits)
-			// add the new byte to the writing buffer
-			bytesBuffer[i] = bw.Buffer
-			// the new buffer is what you didn't write from current byte
-			bw.Buffer = b & (1<<bw.Nbits - 1)
-		} else {
-			// store the remaining bits if they fit in the buffer
-			bw.Buffer = (bw.Buffer << nbits % 8) | b
+	byteBuffer := make([]byte, (nbits-1)/8+1)
+	if nbits <= bw.Nbits {
+		// easy case - all required bits are already in the buffer
+		byteBuffer[0] = bw.Buffer >> (bw.Nbits - nbits) // put the bits in the output
+		bw.Buffer &= (1<<(bw.Nbits-nbits) - 1)          // shift the buffer by how many wanted
+		bw.Nbits -= nbits                               // track how many are still unread
+	} else {
+		// harder case - more bytes are required to be read in
+		rem := nbits % 8 // get the remainder of bits desired for the MSByte
+		if rem == 0 {
+			rem = 8
 		}
-		bw.Nbits = (bw.Nbits + nbits%8) % 8
+		idx := 0 // track where you are in the output
+		if bw.Nbits >= rem {
+			// when the entire leading MSB is contained in the buffer bits
+			shift := bw.Nbits - rem              // determine shift required to take just enough from buffer
+			byteBuffer[idx] = bw.Buffer >> shift // add MSB to output
+			bw.Buffer &= (1<<shift - 1)          // make out what you read frombuffer
+			bw.Nbits = shift                     // reduce unread bits by what you read from buffer
+			rem = 8                              // all future output bytes will be 8 bits
+			idx++                                // increment your output index
+		}
+		for _, b := range bytes {
+			shift := rem - bw.Nbits                                     // determine shift required to take enough from buffer
+			byteBuffer[idx] = (bw.Buffer << shift) | (b >> (8 - shift)) // shift buffer and append from MSb from read byte
+			bw.Buffer = b & (1<<(8-shift) - 1)                          // the new buffer is the tail LSb of the read byte
+			bw.Nbits = 8 - shift                                        // unread bits is updated
+			rem = 8                                                     // all future output bytes will be 8 bits
+			idx++                                                       // increment your output index
+			if idx >= len(byteBuffer) {
+				break
+			}
+		}
 	}
-	_, err := bw.Writer.Write(bytesBuffer) // write the bytes
+	_, err := bw.Writer.Write(byteBuffer) // write the bytes
 	if err != nil {
-		return fmt.Errorf("bitwriter error when writing %d bytes: %v", len(bytesBuffer), err)
+		return fmt.Errorf("bitwriter error when writing %d bytes: %v", len(byteBuffer), err)
 	}
 	return nil
 }

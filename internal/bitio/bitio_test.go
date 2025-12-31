@@ -23,19 +23,21 @@ func TestReadWrite(t *testing.T) {
 	bitWriter := NewBitWriter(&str)
 	bitsLeft := 8 * len(input)
 	for bitsLeft > 0 {
-		bitLength := min(r.Intn(10), bitsLeft)
+		bitLength := min(r.Intn(20), bitsLeft)
 		bits, err := bitReader.ReadBits(bitLength)
 		println()
 		fmt.Printf("Read %d bits: %08b", bitLength, bits)
 		println()
-		fmt.Printf("      - buffer (%d bits): %08b", bitReader.Nbits, bitReader.Buffer)
+		fmt.Printf("      - read buffer (%d bits): %08b", bitReader.Nbits, bitReader.Buffer)
 		println()
 		bitStart := 8*len(input) - bitsLeft
 		bitEnd := bitStart + bitLength
 		if err != nil {
 			t.Fatalf("Failed to read bits %d to %d: %v", bitStart, bitEnd, err)
 		}
+		println()
 		err = bitWriter.WriteBits(bits, bitLength)
+		fmt.Printf("      - write buffer (%d bits): %08b", bitWriter.Nbits, bitWriter.Buffer)
 		if err != nil {
 			t.Fatalf("Failed to write bits %d to %d: %v", bitStart, bitEnd, err)
 		}
