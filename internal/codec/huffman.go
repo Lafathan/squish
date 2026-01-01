@@ -93,17 +93,25 @@ func GetHuffmanDictFromTree(tree *Node) map[byte]*HCode {
 			lBits := make([]byte, bitsByteLength) // make byte arrays to hold children codes
 			rBits := make([]byte, bitsByteLength)
 			for i := range bitsByteLength {
-				if i < len(c.bits) {
-					lBits[i] = c.bits[i] << 1 // each child byte is the parent shifted 1 to the left
-					rBits[i] = c.bits[i] << 1
-				} else {
-					lBits[i] = byte(0) // more bytes than parent? make it zero
-					rBits[i] = byte(0)
+				currentByteIndex := len(c.bits) - 1 - i
+				childByteIndex := bitsByteLength - 1 - i
+				lBits[childByteIndex] = c.bits[currentByteIndex] << 1
+				rBits[childByteIndex] = c.bits[currentByteIndex] << 1
+				if i > 0 && currentByteIndex > 0 {
+					lBits[childByteIndex] &= ((c.bits[currentByteIndex-1] >> 7) & 1)
+					rBits[childByteIndex] &= ((c.bits[currentByteIndex-1] >> 7) & 1)
 				}
-				if i >= 1 {
-					lBits[i] |= c.bits[i-1] >> 7 // handle carryover bits between bytes
-					rBits[i] |= c.bits[i-1] >> 7
-				}
+				//if i < len(c.bits) {
+				//lBits[i] = c.bits[i] << 1 // each child byte is the parent shifted 1 to the left
+				//rBits[i] = c.bits[i] << 1
+				//} else {
+				//lBits[i] = byte(0) // more bytes than parent? make it zero
+				//rBits[i] = byte(0)
+				//}
+				//if i >= 1 {
+				//lBits[i] |= c.bits[i-1] >> 7 // handle carryover bits between bytes
+				//rBits[i] |= c.bits[i-1] >> 7
+				//}
 			}
 			rBits[0] |= 0x01
 			getCode(n.children[0], &HCode{bits: lBits, length: c.length + 1}) // recurse for children
