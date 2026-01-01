@@ -23,7 +23,7 @@ type Node struct {
 
 type HCode struct {
 	bits   []byte
-	length uint8
+	length int
 }
 
 type HuffmanHeap []*Node
@@ -118,7 +118,7 @@ func SerializeHuffmanDictionary(d map[byte]*HCode) []byte {
 	// uint8 bit length, byte value, packed bytes for bit code
 	out := []byte{}
 	for k, v := range d {
-		out = append(out, v.length)
+		out = append(out, uint8(v.length))
 		out = append(out, k)
 		out = append(out, v.bits...)
 	}
@@ -126,7 +126,7 @@ func SerializeHuffmanDictionary(d map[byte]*HCode) []byte {
 	return out
 }
 
-func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, uint8, error) {
+func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, int, error) {
 	h := GetFrequencyMap(src)                                // get freq map
 	t := GetHuffmanTreeFromNodes(h)                          // build the tree
 	d := GetHuffmanDictFromTree(t)                           // get the dictionary of codes
@@ -134,7 +134,7 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, uint8, error) {
 	_, err := outBuffer.Write(SerializeHuffmanDictionary(d)) // write the dictionary to it
 	bw := bitio.NewBitWriter(outBuffer)                      // make a new bitwriter
 	for _, b := range src {
-		err = bw.WriteBitsFromSlice(d[b].bits, d[b].length) // write the new bits for each symbol
+		err = bw.WriteBits(d[b].bits, d[b].length) // write the new bits for each symbol
 		if err != nil {
 			return []byte{}, 0, err
 		}
@@ -146,7 +146,9 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, uint8, error) {
 	return outBuffer.Bytes(), pad, nil
 }
 
-func GetHuffmanTreeFromDict(d map[byte]*HCode) *Node
+func GetHuffmanTreeFromDict(d map[byte]*HCode) *Node {
+	return nil
+}
 
 func DeserializeHuffmanDictionary(br io.ByteReader) (map[byte]*HCode, error) {
 	dict := map[byte]*HCode{} // make a dictionary
@@ -170,7 +172,7 @@ func DeserializeHuffmanDictionary(br io.ByteReader) (map[byte]*HCode, error) {
 			}
 			byteArray = append([]byte{b}, byteArray...)
 		}
-		dict[byteVal] = &HCode{bits: byteArray, length: bitLength} // store the HCode in the dictionary
+		dict[byteVal] = &HCode{bits: byteArray, length: int(bitLength)} // store the HCode in the dictionary
 	}
 	return dict, nil
 }
