@@ -2,7 +2,6 @@ package bitio
 
 import (
 	"bytes"
-	"fmt"
 	"math/rand"
 	"strings"
 	"testing"
@@ -13,10 +12,6 @@ func TestReadWrite(t *testing.T) {
 	src := rand.NewSource(10)
 	r := rand.New(src)
 	input := "Hello World!"
-	println("=========================")
-	fmt.Printf("String: %08b", []byte(input))
-	println()
-	println("=========================")
 	reader := strings.NewReader(input)
 	bitReader := NewBitReader(reader)
 	var str strings.Builder
@@ -25,19 +20,12 @@ func TestReadWrite(t *testing.T) {
 	for bitsLeft > 0 {
 		bitLength := min(r.Intn(20), bitsLeft)
 		bits, err := bitReader.ReadBits(bitLength)
-		println()
-		fmt.Printf("Read %d bits: %08b", bitLength, bits)
-		println()
-		fmt.Printf("      - read buffer (%d bits): %08b", bitReader.Nbits, bitReader.Buffer)
-		println()
 		bitStart := 8*len(input) - bitsLeft
 		bitEnd := bitStart + bitLength
 		if err != nil {
 			t.Fatalf("Failed to read bits %d to %d: %v", bitStart, bitEnd, err)
 		}
-		println()
 		err = bitWriter.WriteBits(bits, bitLength)
-		fmt.Printf("      - write buffer (%d bits): %08b", bitWriter.Nbits, bitWriter.Buffer)
 		if err != nil {
 			t.Fatalf("Failed to write bits %d to %d: %v", bitStart, bitEnd, err)
 		}
