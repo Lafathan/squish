@@ -66,4 +66,11 @@ func TestFlush(t *testing.T) {
 	if n != 2 {
 		t.Fatalf("Padded unexpected amount during flush")
 	}
+	n, err = bw.Flush()
+	if err != nil {
+		t.Fatalf("Failed during flush of empty bitWriter: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("Padded unexpected amount during flush")
+	}
 }

@@ -11,9 +11,9 @@ const (
 
 // codec key map
 var CodecMap = map[uint8]Codec{
-	RAW:     RAWCodec{},
-	RLE:     RLECodec{},
-	HUFFMAN: HUFFMANCodec{},
+	RAW: RAWCodec{},
+	RLE: RLECodec{},
+	//HUFFMAN: HUFFMANCodec{},
 }
 
 // codec interface

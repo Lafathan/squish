@@ -146,7 +146,9 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, int, error) {
 	return outBuffer.Bytes(), pad, nil
 }
 
-func GetHuffmanTreeFromDict(d map[byte]*HCode) *Node
+func GetHuffmanTreeFromDict(d map[byte]*HCode) *Node {
+	return nil
+}
 
 func DeserializeHuffmanDictionary(br io.ByteReader) (map[byte]*HCode, error) {
 	dict := map[byte]*HCode{} // make a dictionary

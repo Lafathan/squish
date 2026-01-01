@@ -59,6 +59,8 @@ func (bw *BitWriter) Flush() (int, error) {
 		if err != nil {
 			return padding, fmt.Errorf("bitwriter error when flushing: %v", err)
 		}
+		bw.Buffer = 0
+		bw.Nbits = 0
 	}
 	return padding, nil
 }
