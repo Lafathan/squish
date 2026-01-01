@@ -40,6 +40,27 @@ func (h *HuffmanHeap) Pop() any {
 	return x
 }
 
+func MakeChildrenBitSequences(parent []byte, length int) ([]byte, []byte) {
+	bitsByteLength := len(parent)
+	if length%8 == 0 {
+		bitsByteLength++
+	}
+	lBits := make([]byte, bitsByteLength) // make byte slice to hold children codes
+	for i := range len(parent) {
+		offset := 0 // get an offset if the children have an additional byte
+		if len(lBits) > len(parent) {
+			offset = 1
+		}
+		lBits[i+offset] = (parent[i] << 1) & 0xFE // shift the parent
+		if i+offset > 0 {                         // store the carryover if necessary
+			lBits[i+offset-1] |= (parent[i] >> 7) & 0x01
+		}
+	}
+	rBits := append([]byte(nil), lBits...)
+	rBits[len(rBits)-1] |= 0x01
+	return lBits, rBits
+}
+
 func GetFrequencyMap(src []byte) map[byte]*Node {
 	if len(src) == 0 {
 		return nil
@@ -79,46 +100,18 @@ func GetHuffmanTreeFromNodes(freqMap map[byte]*Node) *Node {
 }
 
 func GetHuffmanDictFromTree(tree *Node) map[byte]*HCode {
-	dict := map[byte]*HCode{} // store the byte - code pairs
-	curHCode := HCode{bits: []byte{}, length: 0}
+	dict := map[byte]*HCode{}           // store the byte - code pairs
 	var getCode func(n *Node, c *HCode) // define a func for recursive depth first search
 	getCode = func(n *Node, c *HCode) {
 		if n.nodeType == Leaf {
 			dict[n.value] = c // update the dictionary when you arrive at a leaf
 		} else {
-			bitsByteLength := len(c.bits)
-			if c.length%8 == 0 {
-				bitsByteLength++
-			}
-			lBits := make([]byte, bitsByteLength) // make byte arrays to hold children codes
-			rBits := make([]byte, bitsByteLength)
-			for i := range bitsByteLength {
-				currentByteIndex := len(c.bits) - 1 - i
-				childByteIndex := bitsByteLength - 1 - i
-				lBits[childByteIndex] = c.bits[currentByteIndex] << 1
-				rBits[childByteIndex] = c.bits[currentByteIndex] << 1
-				if i > 0 && currentByteIndex > 0 {
-					lBits[childByteIndex] &= ((c.bits[currentByteIndex-1] >> 7) & 1)
-					rBits[childByteIndex] &= ((c.bits[currentByteIndex-1] >> 7) & 1)
-				}
-				//if i < len(c.bits) {
-				//lBits[i] = c.bits[i] << 1 // each child byte is the parent shifted 1 to the left
-				//rBits[i] = c.bits[i] << 1
-				//} else {
-				//lBits[i] = byte(0) // more bytes than parent? make it zero
-				//rBits[i] = byte(0)
-				//}
-				//if i >= 1 {
-				//lBits[i] |= c.bits[i-1] >> 7 // handle carryover bits between bytes
-				//rBits[i] |= c.bits[i-1] >> 7
-				//}
-			}
-			rBits[0] |= 0x01
+			lBits, rBits := MakeChildrenBitSequences(c.bits, c.length)
 			getCode(n.children[0], &HCode{bits: lBits, length: c.length + 1}) // recurse for children
 			getCode(n.children[1], &HCode{bits: rBits, length: c.length + 1})
 		}
 	}
-	getCode(tree, &curHCode)
+	getCode(tree, &HCode{bits: []byte{}, length: 0})
 	return dict
 }
 
@@ -155,7 +148,27 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, int, error) {
 }
 
 func GetHuffmanTreeFromDict(d map[byte]*HCode) *Node {
-	return nil
+	root := Node{nodeType: Branch}
+	var buildTree func(n *Node, val byte, bits []byte, length int, bitsUsed int)
+	buildTree = func(n *Node, val byte, bits []byte, length int, bitsUsed int) {
+		if bitsUsed < length {
+			bitPos := length - 1 - bitsUsed
+			byteIndex := len(bits) - 1 - bitPos/8
+			shift := bitPos % 8
+			bit := (bits[byteIndex] >> shift) & 1
+			if n.children[bit] == nil {
+				n.children[bit] = &Node{nodeType: Branch}
+			}
+			buildTree(n.children[bit], val, bits, length, bitsUsed+1)
+		} else {
+			n.nodeType = Leaf
+			n.value = val
+		}
+	}
+	for k, v := range d {
+		buildTree(&root, k, v.bits, v.length, 0)
+	}
+	return &root
 }
 
 func DeserializeHuffmanDictionary(br io.ByteReader) (map[byte]*HCode, error) {
@@ -173,23 +186,41 @@ func DeserializeHuffmanDictionary(br io.ByteReader) (map[byte]*HCode, error) {
 			return dict, err
 		}
 		byteArray := []byte{} // read in all the bytes of bits
-		for range (bitLength - 1) / 8 {
+		for range (bitLength + 7) / 8 {
 			b, err := br.ReadByte()
 			if err != nil {
 				return dict, err
 			}
-			byteArray = append([]byte{b}, byteArray...)
+			byteArray = append(byteArray, b)
 		}
 		dict[byteVal] = &HCode{bits: byteArray, length: int(bitLength)} // store the HCode in the dictionary
 	}
 	return dict, nil
 }
 
-func (HUFFMANCodec) DecodeBlock(src []byte, padBits uint8) ([]byte, error) {
-	//br := bytes.NewBuffer(src)
-	//d, err := DeserializeHuffmanDictionary(br)
-	//t := GetHuffmanTreeFromDict(d)
-	return src, nil
+func (HUFFMANCodec) DecodeBlock(src []byte, padBits int) ([]byte, error) {
+	br := bytes.NewBuffer(src)
+	d, err := DeserializeHuffmanDictionary(br)
+	if err != nil {
+		return []byte{}, err
+	}
+	t := GetHuffmanTreeFromDict(d)
+	inBuffer := bitio.NewBitReader(br)
+	outBuffer := new(bytes.Buffer) //create a new buffer to write to
+	node := t
+	for {
+		if node.nodeType == Branch {
+			bit, err := inBuffer.ReadBits(1)
+			if err != nil {
+				break
+			}
+			node = node.children[bit[0]]
+		} else {
+			outBuffer.WriteByte(node.value)
+			node = t
+		}
+	}
+	return outBuffer.Bytes(), nil
 }
 
 func (HUFFMANCodec) IsLossless() bool {

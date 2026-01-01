@@ -36,15 +36,15 @@ func (br *BitReader) ReadBits(nbits int) ([]byte, error) {
 		for _, b := range bytes {
 			if br.Nbits >= rem {
 				// when the entire leading MSB is contained in the buffer bits
-				shift := br.Nbits - rem             // determine shift required to take just enough from buffer
+				shift := br.Nbits - rem             // determine shift required to take from buffer
 				out = append(out, br.Buffer>>shift) // add MSB to output
 				br.Buffer &= (1<<shift - 1)         // make out what you read frombuffer
 				br.Nbits = shift                    // reduce unread bits by what you read from buffer
 				rem = 8                             // all future output bytes will be 8 bits
 			}
-			shift := rem - br.Nbits                              // determine shift required to take enough from buffer
-			out = append(out, (br.Buffer<<shift)|(b>>(8-shift))) // shift buffer and append from MSb from read byte
-			br.Buffer = b & (1<<(8-shift) - 1)                   // the new buffer is the tail LSb of the read byte
+			shift := rem - br.Nbits                              // determine shift required to take from buffer
+			out = append(out, (br.Buffer<<shift)|(b>>(8-shift))) // shift buffer, append from MSb from read byte
+			br.Buffer = b & (1<<(8-shift) - 1)                   // the new buffer is the LSb of the read byte
 			br.Nbits = 8 - shift                                 // unread bits is updated
 			rem = 8                                              // all future output bytes will be 8 bits
 		}
