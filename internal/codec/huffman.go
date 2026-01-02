@@ -23,7 +23,7 @@ type Node struct {
 
 type HCode struct {
 	bits   []byte
-	length int
+	length uint8
 }
 
 type HuffmanHeap []*Node
@@ -40,25 +40,23 @@ func (h *HuffmanHeap) Pop() any {
 	return x
 }
 
-func MakeChildrenBitSequences(parent []byte, length int) ([]byte, []byte) {
-	bitsByteLength := len(parent)
+func ShiftByteSliceLeft(bytes []byte, length uint8) []byte {
+	bitsByteLength := len(bytes)
 	if length%8 == 0 {
 		bitsByteLength++
 	}
-	lBits := make([]byte, bitsByteLength) // make byte slice to hold children codes
-	for i := range len(parent) {
+	newBits := make([]byte, bitsByteLength) // make byte slice to hold children codes
+	for i := range len(bytes) {
 		offset := 0 // get an offset if the children have an additional byte
-		if len(lBits) > len(parent) {
+		if len(newBits) > len(bytes) {
 			offset = 1
 		}
-		lBits[i+offset] = (parent[i] << 1) & 0xFE // shift the parent
-		if i+offset > 0 {                         // store the carryover if necessary
-			lBits[i+offset-1] |= (parent[i] >> 7) & 0x01
+		newBits[i+offset] = (bytes[i] << 1) & 0xFE // shift the parent
+		if i+offset > 0 {                          // store the carryover if necessary
+			newBits[i+offset-1] |= (bytes[i] >> 7) & 0x01
 		}
 	}
-	rBits := append([]byte(nil), lBits...)
-	rBits[len(rBits)-1] |= 0x01
-	return lBits, rBits
+	return newBits
 }
 
 func GetFrequencyMap(src []byte) map[byte]*Node {
@@ -106,7 +104,9 @@ func GetHuffmanDictFromTree(tree *Node) map[byte]*HCode {
 		if n.nodeType == Leaf {
 			dict[n.value] = c // update the dictionary when you arrive at a leaf
 		} else {
-			lBits, rBits := MakeChildrenBitSequences(c.bits, c.length)
+			lBits := ShiftByteSliceLeft(c.bits, c.length)
+			rBits := append([]byte(nil), lBits...)
+			rBits[len(rBits)-1] |= 0x01
 			getCode(n.children[0], &HCode{bits: lBits, length: c.length + 1}) // recurse for children
 			getCode(n.children[1], &HCode{bits: rBits, length: c.length + 1})
 		}
@@ -127,7 +127,7 @@ func SerializeHuffmanDictionary(d map[byte]*HCode) []byte {
 	return out
 }
 
-func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, int, error) {
+func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, uint8, error) {
 	h := GetFrequencyMap(src)                                // get freq map
 	t := GetHuffmanTreeFromNodes(h)                          // build the tree
 	d := GetHuffmanDictFromTree(t)                           // get the dictionary of codes
@@ -135,7 +135,7 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, int, error) {
 	_, err := outBuffer.Write(SerializeHuffmanDictionary(d)) // write the dictionary to it
 	bw := bitio.NewBitWriter(outBuffer)                      // make a new bitwriter
 	for _, b := range src {
-		err = bw.WriteBits(d[b].bits, d[b].length) // write the new bits for each symbol
+		err = bw.WriteBits(d[b].bits, int(d[b].length)) // write the new bits for each symbol
 		if err != nil {
 			return []byte{}, 0, err
 		}
@@ -144,18 +144,18 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, int, error) {
 	if err != nil {
 		return []byte{}, 0, err
 	}
-	return outBuffer.Bytes(), pad, nil
+	return outBuffer.Bytes(), uint8(pad), nil
 }
 
 func GetHuffmanTreeFromDict(d map[byte]*HCode) *Node {
-	root := Node{nodeType: Branch}                                               // make an empty root branch node
-	var buildTree func(n *Node, val byte, bits []byte, length int, bitsUsed int) // define for recursion
-	buildTree = func(n *Node, val byte, bits []byte, length int, bitsUsed int) {
+	root := Node{nodeType: Branch}                                                   // make an empty root branch node
+	var buildTree func(n *Node, val byte, bits []byte, length uint8, bitsUsed uint8) // define for recursion
+	buildTree = func(n *Node, val byte, bits []byte, length uint8, bitsUsed uint8) {
 		if bitsUsed < length {
-			bitPos := length - 1 - bitsUsed       // get the position of the decision bit
-			byteIndex := len(bits) - 1 - bitPos/8 // get the byte index of that bit
-			shift := bitPos % 8                   // get how much to shift the decision bit to get it's value in the lsb
-			bit := (bits[byteIndex] >> shift) & 1 // isolate the decision bit
+			bitPos := length - 1 - bitsUsed              // get the position of the decision bit
+			byteIndex := uint8(len(bits)) - 1 - bitPos/8 // get the byte index of that bit
+			shift := bitPos % 8                          // get how much to shift the decision bit to get it's value in the lsb
+			bit := (bits[byteIndex] >> shift) & 1        // isolate the decision bit
 			if n.children[bit] == nil {
 				n.children[bit] = &Node{nodeType: Branch} // create the child node if it doesn't exist
 			}
@@ -193,28 +193,35 @@ func DeserializeHuffmanDictionary(br io.ByteReader) (map[byte]*HCode, error) {
 			}
 			byteArray = append(byteArray, b)
 		}
-		dict[byteVal] = &HCode{bits: byteArray, length: int(bitLength)} // store the HCode in the dictionary
+		dict[byteVal] = &HCode{bits: byteArray, length: bitLength} // store the HCode in the dictionary
 	}
 	return dict, nil
 }
 
-func (HUFFMANCodec) DecodeBlock(src []byte, padBits int) ([]byte, error) {
+func (HUFFMANCodec) DecodeBlock(src []byte, padBits uint8) ([]byte, error) {
 	br := bytes.NewBuffer(src)                 // create a byte buffer for reading bytes
 	d, err := DeserializeHuffmanDictionary(br) // get the Huffman code dictionary
 	if err != nil {
 		return []byte{}, err
 	}
-	t := GetHuffmanTreeFromDict(d)     // build the Huffman tree
-	inBuffer := bitio.NewBitReader(br) // create a bitreader and traverse the tree with bits
-	outBuffer := new(bytes.Buffer)     //create a new buffer to write to
+	t := GetHuffmanTreeFromDict(d)                    // build the Huffman tree
+	inBuffer := bitio.NewBitReader(br)                // create a bitreader and traverse the tree with bits
+	outBuffer := new(bytes.Buffer)                    //create a new buffer to write to
+	padBuffer, err := inBuffer.ReadBits(int(padBits)) // a padding buffer to keep from reading padded bits
+	if err != nil {
+		return outBuffer.Bytes(), nil
+	}
 	node := t
 	for {
 		if node.nodeType == Branch {
-			bit, err := inBuffer.ReadBits(1) // get the next bit
+			bit := (padBuffer[0] >> ((padBits - 1) % 8)) & 0x01
+			node = node.children[bit]           // got to the appropriate child node
+			newBit, err := inBuffer.ReadBits(1) // get the next bit
 			if err != nil {
 				break
 			}
-			node = node.children[bit[0]] // got to the appropriate child node
+			padBuffer = ShiftByteSliceLeft(padBuffer, padBits)
+			padBuffer[len(padBuffer)-1] |= newBit[0]
 		} else {
 			outBuffer.WriteByte(node.value) // if you are at a leaf, you have your value
 			node = t                        // reset to the root tree node

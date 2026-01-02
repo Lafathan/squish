@@ -2,11 +2,11 @@ package codec
 
 type RAWCodec struct{}
 
-func (RAWCodec) EncodeBlock(src []byte) ([]byte, int, error) {
+func (RAWCodec) EncodeBlock(src []byte) ([]byte, uint8, error) {
 	return src, 0, nil
 }
 
-func (RAWCodec) DecodeBlock(src []byte, padBits int) ([]byte, error) {
+func (RAWCodec) DecodeBlock(src []byte, padBits uint8) ([]byte, error) {
 	return src, nil
 }
 
