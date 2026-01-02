@@ -11,14 +11,14 @@ const (
 
 // codec key map
 var CodecMap = map[uint8]Codec{
-	RAW: RAWCodec{},
-	RLE: RLECodec{},
-	//HUFFMAN: HUFFMANCodec{},
+	RAW:     RAWCodec{},
+	RLE:     RLECodec{},
+	HUFFMAN: HUFFMANCodec{},
 }
 
 // codec interface
 type Codec interface {
-	EncodeBlock(src []byte) (dst []byte, padBits uint8, err error)
-	DecodeBlock(src []byte, padBits uint8) (dst []byte, err error)
+	EncodeBlock(src []byte) (dst []byte, padBits int, err error)
+	DecodeBlock(src []byte, padBits int) (dst []byte, err error)
 	IsLossless() bool
 }

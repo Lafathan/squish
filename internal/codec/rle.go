@@ -9,7 +9,7 @@ const (
 
 type RLECodec struct{}
 
-func (RLECodec) EncodeBlock(src []byte) ([]byte, uint8, error) {
+func (RLECodec) EncodeBlock(src []byte) ([]byte, int, error) {
 	srcByteLength := len(src) // how long is the input
 	if srcByteLength == 0 {
 		return []byte{}, 0, nil
@@ -49,7 +49,7 @@ func (RLECodec) EncodeBlock(src []byte) ([]byte, uint8, error) {
 	return encodedMessage, 0, nil
 }
 
-func (RLECodec) DecodeBlock(src []byte, padBits uint8) ([]byte, error) {
+func (RLECodec) DecodeBlock(src []byte, padBits int) ([]byte, error) {
 	outByteLength := 0        // how long will the output be
 	srcByteLength := len(src) // how long is the input
 	if srcByteLength == 0 {
