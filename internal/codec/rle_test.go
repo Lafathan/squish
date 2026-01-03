@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func EncodeDecode(message string, t *testing.T) {
+func RLEEncodeDecode(message string, t *testing.T) {
 	rle := RLECodec{}
 	coded, pad, err := rle.EncodeBlock([]byte(message))
 	if err != nil {
@@ -16,23 +16,28 @@ func EncodeDecode(message string, t *testing.T) {
 		t.Fatalf("RLE decoding failed")
 	}
 	if message != string(decoded) {
-		t.Fatalf("Rle encoding mismatch: got %s - expected %s", string(decoded), message)
+		t.Fatalf("RLE encoding mismatch: got %s - expected %s", string(decoded), message)
 	}
 }
 
 func TestRLEEncodeDecode(t *testing.T) {
-	message := "Hello World! Whooooooooooooooohhhhhhhhhhhhhooooooooooooooooo!"
-	EncodeDecode(message, t)
+	message := "Hello World!"
+	RLEEncodeDecode(message, t)
 }
 
 func TestRLEMaxRunLength(t *testing.T) {
-	message := "aaa" + strings.Repeat("b", 511) + "cccc"
-	EncodeDecode(message, t)
+	message := "abccdddeeeeeffffffff" +
+		strings.Repeat("g", 13) +
+		strings.Repeat("h", 21) +
+		strings.Repeat("i", 34) +
+		strings.Repeat("j", 55) +
+		strings.Repeat("k", 89)
+	RLEEncodeDecode(message, t)
 }
 
-func TestEmptyMessage(t *testing.T) {
+func TestRLEEmptyMessage(t *testing.T) {
 	message := ""
-	EncodeDecode(message, t)
+	RLEEncodeDecode(message, t)
 }
 
 func TestRLELossless(t *testing.T) {

@@ -46,11 +46,11 @@ func ShiftByteSliceLeft(bytes []byte, length uint8) []byte {
 		bitsByteLength++
 	}
 	newBits := make([]byte, bitsByteLength) // make byte slice to hold children codes
+	offset := 0                             // get an offset if the children have an additional byte
+	if len(newBits) > len(bytes) {
+		offset = 1
+	}
 	for i := range len(bytes) {
-		offset := 0 // get an offset if the children have an additional byte
-		if len(newBits) > len(bytes) {
-			offset = 1
-		}
 		newBits[i+offset] = (bytes[i] << 1) & 0xFE // shift the parent
 		if i+offset > 0 {                          // store the carryover if necessary
 			newBits[i+offset-1] |= (bytes[i] >> 7) & 0x01
@@ -128,6 +128,9 @@ func SerializeHuffmanDictionary(d map[byte]*HCode) []byte {
 }
 
 func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, uint8, error) {
+	if len(src) == 0 {
+		return []byte{}, 0, nil
+	}
 	h := GetFrequencyMap(src)                                // get freq map
 	t := GetHuffmanTreeFromNodes(h)                          // build the tree
 	d := GetHuffmanDictFromTree(t)                           // get the dictionary of codes
@@ -148,25 +151,25 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, uint8, error) {
 }
 
 func GetHuffmanTreeFromDict(d map[byte]*HCode) *Node {
-	root := Node{nodeType: Branch}                                                   // make an empty root branch node
-	var buildTree func(n *Node, val byte, bits []byte, length uint8, bitsUsed uint8) // define for recursion
-	buildTree = func(n *Node, val byte, bits []byte, length uint8, bitsUsed uint8) {
-		if bitsUsed < length {
-			bitPos := length - 1 - bitsUsed              // get the position of the decision bit
+	root := Node{nodeType: Branch}                                   // make an empty root node
+	var buildTree func(n *Node, val byte, bits []byte, length uint8) // define for recursion
+	buildTree = func(n *Node, val byte, bits []byte, length uint8) {
+		if length > 0 {
+			bitPos := length - 1                         // get the position of the decision bit
 			byteIndex := uint8(len(bits)) - 1 - bitPos/8 // get the byte index of that bit
-			shift := bitPos % 8                          // get how much to shift the decision bit to get it's value in the lsb
+			shift := bitPos % 8                          // shift required to move the decision bit to lsb
 			bit := (bits[byteIndex] >> shift) & 1        // isolate the decision bit
 			if n.children[bit] == nil {
 				n.children[bit] = &Node{nodeType: Branch} // create the child node if it doesn't exist
 			}
-			buildTree(n.children[bit], val, bits, length, bitsUsed+1) // recurse into the child node
+			buildTree(n.children[bit], val, bits, length-1) // recurse into the child node
 		} else {
 			n.nodeType = Leaf // if you are at the end of your bit stream, you are at a leaf
 			n.value = val
 		}
 	}
 	for k, v := range d {
-		buildTree(&root, k, v.bits, v.length, 0)
+		buildTree(&root, k, v.bits, v.length)
 	}
 	return &root
 }
@@ -199,6 +202,9 @@ func DeserializeHuffmanDictionary(br io.ByteReader) (map[byte]*HCode, error) {
 }
 
 func (HUFFMANCodec) DecodeBlock(src []byte, padBits uint8) ([]byte, error) {
+	if len(src) == 0 {
+		return []byte{}, nil
+	}
 	br := bytes.NewBuffer(src)                 // create a byte buffer for reading bytes
 	d, err := DeserializeHuffmanDictionary(br) // get the Huffman code dictionary
 	if err != nil {

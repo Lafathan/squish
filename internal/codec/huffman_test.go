@@ -1,23 +1,43 @@
 package codec
 
 import (
+	"strings"
 	"testing"
 )
 
-func TestHuffman(t *testing.T) {
-	message := "Hello World!"
+func HuffmanEncodeDecode(message string, t *testing.T) {
 	hc := HUFFMANCodec{}
-	out, pad, err := hc.EncodeBlock([]byte(message))
+	coded, pad, err := hc.EncodeBlock([]byte(message))
 	if err != nil {
-		t.Fatalf("Error in Huffman encoding: %v", err)
+		t.Fatalf("Huffman encoding failed")
 	}
-	decoded, err := hc.DecodeBlock(out, pad)
+	decoded, err := hc.DecodeBlock(coded, pad)
 	if err != nil {
-		t.Fatalf("Error in Huffman decoding: %v", err)
+		t.Fatalf("Huffman decoding failed")
 	}
 	if message != string(decoded) {
-		t.Fatalf("Rle encoding mismatch: got %s - expected %s", string(decoded), message)
+		t.Fatalf("Huffman encoding mismatch: got %s - expected %s", string(decoded), message)
 	}
+}
+
+func TestHuffmanEncodeDecode(t *testing.T) {
+	message := "Hello World!"
+	HuffmanEncodeDecode(message, t)
+}
+
+func TestHuffmanMaxRunLength(t *testing.T) {
+	message := "abccdddeeeeeffffffff" +
+		strings.Repeat("g", 13) +
+		strings.Repeat("h", 21) +
+		strings.Repeat("i", 34) +
+		strings.Repeat("j", 55) +
+		strings.Repeat("k", 89)
+	HuffmanEncodeDecode(message, t)
+}
+
+func TestHuffmanEmptyMessage(t *testing.T) {
+	message := ""
+	HuffmanEncodeDecode(message, t)
 }
 
 func TestHuffLossless(t *testing.T) {
