@@ -36,7 +36,7 @@ func Encode(src io.Reader, dst io.Writer, codecID uint8, blockSize uint64, check
 		if !ok {
 			return errors.New("Invalid codec ID")
 		}
-		compressed, padBits, err := currentCodec.EncodeBlock(uncompressed) // encode it
+		compressed, err := currentCodec.EncodeBlock(uncompressed) // encode it
 		if err != nil {
 			return err
 		}
@@ -52,7 +52,6 @@ func Encode(src io.Reader, dst io.Writer, codecID uint8, blockSize uint64, check
 			BlockType: frame.DefaultCodec,
 			USize:     uint64(len(uncompressed)),
 			CSize:     uint64(len(compressed)),
-			PadBits:   padBits,
 			Checksum:  checksum,
 		}
 		err = fw.WriteBlock(block, bytes.NewReader(compressed)) // write the block

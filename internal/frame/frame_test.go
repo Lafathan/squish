@@ -17,9 +17,9 @@ func TestWriteRead(t *testing.T) {
 		{Key: MagicKey, Codec: codec.RAW, ChecksumMode: UncompressedChecksum | CompressedChecksum},
 	}
 	blocks := []Block{
-		{BlockType: DefaultCodec, USize: 12, CSize: 12, PadBits: 1, Checksum: 0},
-		{BlockType: BlockCodec, Codec: codec.RAW, USize: 12, CSize: 12, PadBits: 0, Checksum: 75},
-		{BlockType: DefaultCodec, USize: 12, CSize: 12, PadBits: 0, Checksum: 170},
+		{BlockType: DefaultCodec, USize: 12, CSize: 12, Checksum: 0},
+		{BlockType: BlockCodec, Codec: codec.RAW, USize: 12, CSize: 12, Checksum: 75},
+		{BlockType: DefaultCodec, USize: 12, CSize: 12, Checksum: 170},
 		{BlockType: DefaultCodec, USize: 12, CSize: 12, Checksum: 345},
 	}
 	for i, h := range headers {

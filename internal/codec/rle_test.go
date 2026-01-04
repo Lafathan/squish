@@ -7,11 +7,11 @@ import (
 
 func RLEEncodeDecode(message string, t *testing.T) {
 	rle := RLECodec{}
-	coded, pad, err := rle.EncodeBlock([]byte(message))
+	coded, err := rle.EncodeBlock([]byte(message))
 	if err != nil {
 		t.Fatalf("RLE encoding failed")
 	}
-	decoded, err := rle.DecodeBlock(coded, pad)
+	decoded, err := rle.DecodeBlock(coded)
 	if err != nil {
 		t.Fatalf("RLE decoding failed")
 	}

@@ -9,10 +9,10 @@ const (
 
 type RLECodec struct{}
 
-func (RLECodec) EncodeBlock(src []byte) ([]byte, uint8, error) {
+func (RLECodec) EncodeBlock(src []byte) ([]byte, error) {
 	srcByteLength := len(src) // how long is the input
 	if srcByteLength == 0 {
-		return []byte{}, 0, nil
+		return []byte{}, nil
 	}
 	outByteLength := PairSize    // how long will output be
 	currentRunLength := uint8(0) // keep track of the current length of run
@@ -46,10 +46,10 @@ func (RLECodec) EncodeBlock(src []byte) ([]byte, uint8, error) {
 			currentRunByte = src[srcIndex]                          // reset the byte tracked
 		}
 	}
-	return encodedMessage, 0, nil
+	return encodedMessage, nil
 }
 
-func (RLECodec) DecodeBlock(src []byte, padBits uint8) ([]byte, error) {
+func (RLECodec) DecodeBlock(src []byte) ([]byte, error) {
 	outByteLength := 0        // how long will the output be
 	srcByteLength := len(src) // how long is the input
 	if srcByteLength == 0 {

@@ -5,11 +5,11 @@ import "testing"
 func TestRAWEncodeDecode(t *testing.T) {
 	message := "Hello World!"
 	raw := RAWCodec{}
-	coded, pad, err := raw.EncodeBlock([]byte(message))
+	coded, err := raw.EncodeBlock([]byte(message))
 	if err != nil {
 		t.Fatalf("RAW encoding failed")
 	}
-	decoded, err := raw.DecodeBlock(coded, pad)
+	decoded, err := raw.DecodeBlock(coded)
 	if err != nil {
 		t.Fatalf("RAW Decoding failed")
 	}

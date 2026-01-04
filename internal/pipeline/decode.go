@@ -47,7 +47,7 @@ func Decode(src io.Reader, dst io.Writer) error {
 		if block.BlockType == frame.BlockCodec {
 			currentCodec = codec.CodecMap[block.Codec]
 		}
-		uncompressed, err := currentCodec.DecodeBlock(compressed, block.PadBits) // decode it
+		uncompressed, err := currentCodec.DecodeBlock(compressed) // decode it
 		if err != nil {
 			return err
 		}

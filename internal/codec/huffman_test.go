@@ -7,11 +7,11 @@ import (
 
 func HuffmanEncodeDecode(message string, t *testing.T) {
 	hc := HUFFMANCodec{}
-	coded, pad, err := hc.EncodeBlock([]byte(message))
+	coded, err := hc.EncodeBlock([]byte(message))
 	if err != nil {
 		t.Fatalf("Huffman encoding failed")
 	}
-	decoded, err := hc.DecodeBlock(coded, pad)
+	decoded, err := hc.DecodeBlock(coded)
 	if err != nil {
 		t.Fatalf("Huffman decoding failed")
 	}

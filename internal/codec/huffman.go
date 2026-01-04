@@ -127,9 +127,9 @@ func SerializeHuffmanDictionary(d map[byte]*HCode) []byte {
 	return out
 }
 
-func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, uint8, error) {
+func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, error) {
 	if len(src) == 0 {
-		return []byte{}, 0, nil
+		return []byte{}, nil
 	}
 	h := GetFrequencyMap(src)                                // get freq map
 	t := GetHuffmanTreeFromNodes(h)                          // build the tree
@@ -140,14 +140,15 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, uint8, error) {
 	for _, b := range src {
 		err = bw.WriteBits(d[b].bits, int(d[b].length)) // write the new bits for each symbol
 		if err != nil {
-			return []byte{}, 0, err
+			return []byte{}, err
 		}
 	}
 	pad, err := bw.Flush() // flush it and report back the number of pad bits
 	if err != nil {
-		return []byte{}, 0, err
+		return []byte{}, err
 	}
-	return outBuffer.Bytes(), uint8(pad), nil
+	out := append([]byte{byte(pad)}, outBuffer.Bytes()...)
+	return out, nil
 }
 
 func GetHuffmanTreeFromDict(d map[byte]*HCode) *Node {
@@ -201,11 +202,15 @@ func DeserializeHuffmanDictionary(br io.ByteReader) (map[byte]*HCode, error) {
 	return dict, nil
 }
 
-func (HUFFMANCodec) DecodeBlock(src []byte, padBits uint8) ([]byte, error) {
+func (HUFFMANCodec) DecodeBlock(src []byte) ([]byte, error) {
 	if len(src) == 0 {
 		return []byte{}, nil
 	}
-	br := bytes.NewBuffer(src)                 // create a byte buffer for reading bytes
+	br := bytes.NewBuffer(src)    // create a byte buffer for reading bytes
+	padBits, err := br.ReadByte() // read in the padded bits byte
+	if err != nil {
+		return []byte{}, err
+	}
 	d, err := DeserializeHuffmanDictionary(br) // get the Huffman code dictionary
 	if err != nil {
 		return []byte{}, err
