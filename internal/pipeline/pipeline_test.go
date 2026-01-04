@@ -7,10 +7,10 @@ import (
 	"testing"
 )
 
-func testHelper(t *testing.T, str string, codecID uint8, blockSize uint64, checksumMode uint8) {
+func testHelper(t *testing.T, str string, codecIDs []uint8, blockSize uint64, checksumMode uint8) {
 	encodeReader := strings.NewReader(str)
 	encodeWriter := new(strings.Builder)
-	err := Encode(encodeReader, encodeWriter, codecID, blockSize, checksumMode)
+	err := Encode(encodeReader, encodeWriter, codecIDs, blockSize, checksumMode)
 	if err != nil {
 		t.Fatalf("Pipeline error during encoding: %v", err)
 	}
@@ -27,15 +27,15 @@ func testHelper(t *testing.T, str string, codecID uint8, blockSize uint64, check
 
 func TestPipelineCompChecksum(t *testing.T) {
 	message := "Hello World!"
-	testHelper(t, message, codec.RAW, frame.MaxBlockSize, frame.CompressedChecksum)
+	testHelper(t, message, []uint8{codec.RAW}, frame.MaxBlockSize, frame.CompressedChecksum)
 }
 
 func TestPipelineUncompChecksumSmallBlockSize(t *testing.T) {
 	message := "Hello World!"
-	testHelper(t, message, codec.RAW, 6, frame.UncompressedChecksum)
+	testHelper(t, message, []uint8{codec.RAW}, 6, frame.UncompressedChecksum)
 }
 
 func TestPipelineChecksumLargeBlockSize(t *testing.T) {
 	message := "Hello World!"
-	testHelper(t, message, codec.RAW, frame.MaxBlockSize+99, frame.CompressedChecksum|frame.UncompressedChecksum)
+	testHelper(t, message, []uint8{codec.RAW}, frame.MaxBlockSize+99, frame.CompressedChecksum|frame.UncompressedChecksum)
 }

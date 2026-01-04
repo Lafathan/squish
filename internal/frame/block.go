@@ -8,11 +8,11 @@ import (
 )
 
 type Block struct {
-	BlockType uint8  // 0x00 EOS, 0x01 Default codec, 0x02 Block codec
-	Codec     uint8  // only used if BlockType == 0x02
-	USize     uint64 // uncompressed size
-	CSize     uint64 // compressed size
-	Checksum  uint64 // checksum value 4 bytes for uncompressed, 4 bytes for compressed
+	BlockType uint8   // 0x00 EOS, 0x01 Default codec, 0x02 Block codec
+	Codec     []uint8 // only used if BlockType > 0
+	USize     uint64  // uncompressed size
+	CSize     uint64  // compressed size
+	Checksum  uint64  // checksum value 4 bytes for uncompressed, 4 bytes for compressed
 }
 
 func (b *Block) Valid() error {
@@ -23,6 +23,21 @@ func (b *Block) Valid() error {
 		return errors.New("invalid block size found")
 	}
 	return nil
+}
+
+func (block1 Block) Equal(block2 Block) bool {
+	a := block1.BlockType == block2.BlockType
+	b := block1.USize == block2.USize
+	c := block1.CSize == block2.CSize
+	d := block1.Checksum == block2.Checksum
+	e := true
+	for i := range block1.Codec {
+		e = block1.Codec[i] == block2.Codec[i]
+		if !e {
+			return false
+		}
+	}
+	return a && b && c && d && e
 }
 
 func (b Block) String() string {
@@ -46,12 +61,18 @@ func ReadBlock(fr *FrameReader) (Block, error) {
 	if b.BlockType == EOS {
 		return b, nil
 	}
-	// read the codec if there is a block specific one
+	// read the number of codec if there is a block specific one
+	codecs := byte(0)
 	if b.BlockType == BlockCodec {
-		b.Codec, err = fr.ReadByte()
+		codecs, err = fr.ReadByte()
 		if err != nil {
-			return b, fmt.Errorf("Error in reading block codec: %v", err)
+			return b, fmt.Errorf("Error in reading block codecs: %v", err)
 		}
+	}
+	// read the order of the codecs
+	b.Codec, err = fr.ReadBytes(int(codecs))
+	if err != nil {
+		return b, fmt.Errorf("Error in reading block codec: %v", err)
 	}
 	// read and assign the varint sizes
 	b.USize, err = binary.ReadUvarint(fr)
@@ -92,7 +113,8 @@ func WriteBlock(fw *FrameWriter, b Block) error {
 	bytes := make([]byte, 0, 27)
 	bytes = append(bytes, b.BlockType)
 	if b.BlockType == BlockCodec {
-		bytes = append(bytes, b.Codec)
+		bytes = append(bytes, byte(len(b.Codec)))
+		bytes = append(bytes, b.Codec...)
 	}
 	bytes = binary.AppendUvarint(bytes, b.USize)
 	bytes = binary.AppendUvarint(bytes, b.CSize)

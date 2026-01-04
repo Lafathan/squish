@@ -11,14 +11,14 @@ var payloadStr string = "Hello World!"
 
 func TestWriteRead(t *testing.T) {
 	headers := []Header{
-		{Key: MagicKey, Codec: codec.RAW, ChecksumMode: NoChecksum},
-		{Key: MagicKey, Codec: codec.RAW, ChecksumMode: UncompressedChecksum},
-		{Key: MagicKey, Codec: codec.RAW, ChecksumMode: CompressedChecksum},
-		{Key: MagicKey, Codec: codec.RAW, ChecksumMode: UncompressedChecksum | CompressedChecksum},
+		{Key: MagicKey, Codec: []uint8{codec.RAW}, ChecksumMode: NoChecksum},
+		{Key: MagicKey, Codec: []uint8{codec.RAW}, ChecksumMode: UncompressedChecksum},
+		{Key: MagicKey, Codec: []uint8{codec.RAW}, ChecksumMode: CompressedChecksum},
+		{Key: MagicKey, Codec: []uint8{codec.RAW}, ChecksumMode: UncompressedChecksum | CompressedChecksum},
 	}
 	blocks := []Block{
 		{BlockType: DefaultCodec, USize: 12, CSize: 12, Checksum: 0},
-		{BlockType: BlockCodec, Codec: codec.RAW, USize: 12, CSize: 12, Checksum: 75},
+		{BlockType: BlockCodec, Codec: []uint8{codec.RAW}, USize: 12, CSize: 12, Checksum: 75},
 		{BlockType: DefaultCodec, USize: 12, CSize: 12, Checksum: 170},
 		{BlockType: DefaultCodec, USize: 12, CSize: 12, Checksum: 345},
 	}
@@ -43,15 +43,15 @@ func TestWriteRead(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to ready FrameReader: %v", err)
 		}
-		if fr.Header != h {
-			t.Fatalf("Header mismatch in WriteRead test\n%s\n%s", h, fr.Header)
+		if !fr.Header.Equal(h) {
+			t.Fatalf("Header mismatch in WriteRead test %d\n%s\n%s", i, h, fr.Header)
 		}
 		for i := range len(testBlocks) - 1 {
 			block, payloadReader, err := fr.Next()
 			if err != nil {
 				t.Fatalf("Failed to read block %d: %v", i, err)
 			}
-			if block != testBlocks[i] {
+			if !block.Equal(testBlocks[i]) {
 				t.Fatalf("Mismatch in header of block %d, %s", i, block)
 			}
 			bytes, err := io.ReadAll(payloadReader)

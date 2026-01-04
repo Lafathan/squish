@@ -9,11 +9,11 @@ import (
 	"squish/internal/frame"
 )
 
-func Encode(src io.Reader, dst io.Writer, codecID uint8, blockSize uint64, checksumMode uint8) error {
+func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize uint64, checksumMode uint8) error {
 	header := frame.Header{ // build your header
 		Key:          frame.MagicKey,
 		Flags:        0x00,
-		Codec:        codecID,
+		Codec:        codecIDs,
 		ChecksumMode: checksumMode,
 	}
 	fw := frame.NewFrameWriter(dst, header) // make a framewriter
@@ -25,36 +25,39 @@ func Encode(src io.Reader, dst io.Writer, codecID uint8, blockSize uint64, check
 	blockSize = min(blockSize, frame.MaxBlockSize) // validate blockSize first
 	for {
 		blockReader := io.LimitedReader{R: src, N: int64(blockSize)} // make a new LimitedReader
-		uncompressed, err := io.ReadAll(&blockReader)                // read it all in from the src
+		data, err := io.ReadAll(&blockReader)                        // read it all in from the src
 		if err != nil {
 			return err
 		}
-		if len(uncompressed) == 0 {
+		uncompressedLength := len(data)
+		if uncompressedLength == 0 {
 			break
-		}
-		currentCodec, ok := codec.CodecMap[codecID]
-		if !ok {
-			return errors.New("Invalid codec ID")
-		}
-		compressed, err := currentCodec.EncodeBlock(uncompressed) // encode it
-		if err != nil {
-			return err
 		}
 		checksum := uint64(0) // determine the checksum values
 		if checksumMode&frame.UncompressedChecksum > 0 {
-			checksum = uint64(crc32.ChecksumIEEE(uncompressed))
+			checksum = uint64(crc32.ChecksumIEEE(data))
+		}
+		for _, codecID := range codecIDs {
+			currentCodec, ok := codec.CodecMap[codecID]
+			if !ok {
+				return errors.New("Invalid codec ID")
+			}
+			data, err = currentCodec.EncodeBlock(data) // encode it
+			if err != nil {
+				return err
+			}
 		}
 		if checksumMode&frame.CompressedChecksum > 0 {
 			checksum = checksum << (8 * crc32.Size)
-			checksum += uint64(crc32.ChecksumIEEE(compressed))
+			checksum += uint64(crc32.ChecksumIEEE(data))
 		}
 		block := frame.Block{ // build the block
 			BlockType: frame.DefaultCodec,
-			USize:     uint64(len(uncompressed)),
-			CSize:     uint64(len(compressed)),
+			USize:     uint64(uncompressedLength),
+			CSize:     uint64(len(data)),
 			Checksum:  checksum,
 		}
-		err = fw.WriteBlock(block, bytes.NewReader(compressed)) // write the block
+		err = fw.WriteBlock(block, bytes.NewReader(data)) // write the block
 		if err != nil {
 			return err
 		}

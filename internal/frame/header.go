@@ -7,10 +7,10 @@ import (
 )
 
 type Header struct {
-	Key          string // "SQSH" Magic string marking the start of a header
-	Flags        uint8  // flags to determine processing
-	Codec        uint8  // default codec used
-	ChecksumMode uint8  // per block checksum mode
+	Key          string  // "SQSH" Magic string marking the start of a header
+	Flags        uint8   // flags to determine processing
+	Codec        []uint8 // default codec used
+	ChecksumMode uint8   // per block checksum mode
 }
 
 func (h *Header) Valid() error {
@@ -32,6 +32,20 @@ func (h Header) String() string {
 	return s
 }
 
+func (header1 Header) Equal(header2 Header) bool {
+	a := header1.Key == header2.Key
+	b := header1.Flags == header2.Flags
+	c := header1.ChecksumMode == header2.ChecksumMode
+	d := true
+	for i := range header1.Codec {
+		d = header1.Codec[i] == header2.Codec[i]
+		if !d {
+			return false
+		}
+	}
+	return a && b && c && d
+}
+
 func ReadHeader(r io.Reader) (Header, error) {
 	var h Header
 	// read in the header of the frame
@@ -40,20 +54,26 @@ func ReadHeader(r io.Reader) (Header, error) {
 	if err != nil {
 		return h, fmt.Errorf("error in reading header: %v", err)
 	}
-
 	// assign values to the header of the FrameReader
 	h.Key = string(bytes[:4])
 	h.Flags = bytes[4]
-	h.Codec = bytes[5]
-	h.ChecksumMode = bytes[6]
-
+	h.ChecksumMode = bytes[5]
+	codecs := bytes[6]
+	h.Codec = make([]byte, codecs)
+	_, err = io.ReadFull(r, h.Codec)
+	if err != nil {
+		return h, fmt.Errorf("error in reading codecs from header: %v", err)
+	}
 	return h, nil
 }
 
 func WriteHeader(w io.Writer, h Header) error {
 	// build byte array for header
 	bytes := []byte(h.Key)
-	bytes = append(bytes, []byte{h.Flags, h.Codec, h.ChecksumMode}...)
+	bytes = append(bytes, h.Flags)
+	bytes = append(bytes, h.ChecksumMode)
+	bytes = append(bytes, byte(len(h.Codec)))
+	bytes = append(bytes, h.Codec...)
 	// write the header so the FrameWriter is ready to start writing blocks
 	_, err := w.Write(bytes)
 	if err != nil {

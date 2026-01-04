@@ -23,9 +23,9 @@ func Decode(src io.Reader, dst io.Writer) error {
 		if block.BlockType == frame.EOS { // break if you reached the EOS
 			break
 		}
-		compressed := make([]byte, block.CSize)
-		in, err := io.ReadFull(payload, compressed) // dump payload to byte slice
-		if in != int(block.CSize) {                 // verify compressed payload size
+		data := make([]byte, block.CSize)
+		in, err := io.ReadFull(payload, data) // dump payload to byte slice
+		if in != int(block.CSize) {           // verify compressed payload size
 			return fmt.Errorf("Payload does not match CSize")
 		}
 		if err != nil {
@@ -33,33 +33,40 @@ func Decode(src io.Reader, dst io.Writer) error {
 		}
 		blockCS := block.Checksum
 		if fr.Header.ChecksumMode&frame.CompressedChecksum > 0 {
-			csum := uint64(crc32.ChecksumIEEE(compressed))
+			csum := uint64(crc32.ChecksumIEEE(data))
 			exp := (1<<(8*crc32.Size) - 1) & blockCS
 			if csum != exp {
 				return fmt.Errorf("Mismatched checksum for compressed payload: got %08x - expected %08x", csum, exp)
 			}
 			blockCS = blockCS >> (8 * crc32.Size)
 		}
-		currentCodec, ok := codec.CodecMap[fr.Header.Codec] // determine the codec to use
-		if !ok {
-			return errors.New("Invalid codec ID")
-		}
+		codecList := fr.Header.Codec
 		if block.BlockType == frame.BlockCodec {
-			currentCodec = codec.CodecMap[block.Codec]
+			codecList = block.Codec
 		}
-		uncompressed, err := currentCodec.DecodeBlock(compressed) // decode it
-		if err != nil {
-			return err
+		lossless := true
+		for _, codecID := range codecList {
+			currentCodec, ok := codec.CodecMap[codecID] // determine the codec to use
+			if !ok {
+				return errors.New("Invalid codec ID")
+			}
+			data, err = currentCodec.DecodeBlock(data) // decode it
+			if err != nil {
+				return err
+			}
+			if currentCodec.IsLossless() == false {
+				lossless = false
+			}
 		}
-		if fr.Header.ChecksumMode&frame.UncompressedChecksum > 0 && currentCodec.IsLossless() {
-			csum := uint64(crc32.ChecksumIEEE(uncompressed))
+		if fr.Header.ChecksumMode&frame.UncompressedChecksum > 0 && lossless {
+			csum := uint64(crc32.ChecksumIEEE(data))
 			exp := (1<<(8*crc32.Size) - 1) & blockCS
 			if csum != exp {
 				return fmt.Errorf("Mismatched checksum for uncompressed payload: got %08x - expected %08x", csum, exp)
 			}
 		}
-		out, err := dst.Write(uncompressed) // write it out
-		if out != int(block.USize) {        // verify the uncompressed payload size
+		out, err := dst.Write(data)  // write it out
+		if out != int(block.USize) { // verify the uncompressed payload size
 			return fmt.Errorf("Payload does not match USize")
 		}
 		if err != nil {
