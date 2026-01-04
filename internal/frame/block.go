@@ -41,11 +41,11 @@ func (block1 Block) Equal(block2 Block) bool {
 }
 
 func (b Block) String() string {
-	s := fmt.Sprintf("BlockType:      %d\n", b.BlockType)
-	s += fmt.Sprintf("Codec:          %d\n", b.Codec)
-	s += fmt.Sprintf("USize:          %d\n", b.USize)
-	s += fmt.Sprintf("CSize:          %d\n", b.CSize)
-	s += fmt.Sprintf("Checksum:       %016x\n", b.Checksum)
+	s := fmt.Sprintf("BlockType: %d\n", b.BlockType)
+	s += fmt.Sprintf("Codec:     %d\n", b.Codec)
+	s += fmt.Sprintf("USize:     %d\n", b.USize)
+	s += fmt.Sprintf("CSize:     %d\n", b.CSize)
+	s += fmt.Sprintf("Checksum:  %016x\n", b.Checksum)
 	return s
 }
 
@@ -55,7 +55,7 @@ func ReadBlock(fr *FrameReader) (Block, error) {
 	// get block type
 	b.BlockType, err = fr.ReadByte()
 	if err != nil {
-		return b, fmt.Errorf("Error in reading block type: %v", err)
+		return b, fmt.Errorf("error in reading block type: %w", err)
 	}
 	// return if EOS block
 	if b.BlockType == EOS {
@@ -66,22 +66,22 @@ func ReadBlock(fr *FrameReader) (Block, error) {
 	if b.BlockType == BlockCodec {
 		codecs, err = fr.ReadByte()
 		if err != nil {
-			return b, fmt.Errorf("Error in reading block codecs: %v", err)
+			return b, fmt.Errorf("error in reading block codecs: %w", err)
 		}
 	}
 	// read the order of the codecs
 	b.Codec, err = fr.ReadBytes(int(codecs))
 	if err != nil {
-		return b, fmt.Errorf("Error in reading block codec: %v", err)
+		return b, fmt.Errorf("error in reading block codec list: %w", err)
 	}
 	// read and assign the varint sizes
 	b.USize, err = binary.ReadUvarint(fr)
 	if err != nil {
-		return b, fmt.Errorf("Error in reading block uncompressed size: %v", err)
+		return b, fmt.Errorf("error in reading block uncompressed size: %w", err)
 	}
 	b.CSize, err = binary.ReadUvarint(fr)
 	if err != nil {
-		return b, fmt.Errorf("Error in reading block compressed size: %v", err)
+		return b, fmt.Errorf("error in reading block compressed size: %w", err)
 	}
 	// read the checksum data according to the method
 	byteLength := 0
@@ -94,7 +94,7 @@ func ReadBlock(fr *FrameReader) (Block, error) {
 	if byteLength > 0 {
 		cs, err := fr.ReadBytes(byteLength)
 		if err != nil {
-			return b, fmt.Errorf("Error in reading block checksum: %v", err)
+			return b, fmt.Errorf("error in reading block checksum: %w", err)
 		}
 		for _, csbyte := range cs {
 			b.Checksum = (b.Checksum << 8) | uint64(csbyte)
@@ -125,11 +125,10 @@ func WriteBlock(fw *FrameWriter, b Block) error {
 	} else if hasUCS || hasCCS {
 		bytes = binary.BigEndian.AppendUint32(bytes, uint32(b.Checksum))
 	}
-
 	// write the bytes
 	_, err := fw.Writer.Write(bytes)
 	if err != nil {
-		return fmt.Errorf("error in writing block - %s: %v", b, err)
+		return fmt.Errorf("error in writing block - %s: %w", b, err)
 	}
 	return nil
 }

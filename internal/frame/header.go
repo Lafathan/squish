@@ -52,7 +52,7 @@ func ReadHeader(r io.Reader) (Header, error) {
 	bytes := make([]byte, 7)
 	_, err := io.ReadFull(r, bytes)
 	if err != nil {
-		return h, fmt.Errorf("error in reading header: %v", err)
+		return h, fmt.Errorf("error in reading header: %w", err)
 	}
 	// assign values to the header of the FrameReader
 	h.Key = string(bytes[:4])
@@ -62,7 +62,7 @@ func ReadHeader(r io.Reader) (Header, error) {
 	h.Codec = make([]byte, codecs)
 	_, err = io.ReadFull(r, h.Codec)
 	if err != nil {
-		return h, fmt.Errorf("error in reading codecs from header: %v", err)
+		return h, fmt.Errorf("error in reading codecs from header: %w", err)
 	}
 	return h, nil
 }
@@ -77,7 +77,7 @@ func WriteHeader(w io.Writer, h Header) error {
 	// write the header so the FrameWriter is ready to start writing blocks
 	_, err := w.Write(bytes)
 	if err != nil {
-		return fmt.Errorf("error in writing header - %s: %v", h, err)
+		return fmt.Errorf("error in writing header - %s: %w", h, err)
 	}
 	return nil
 }

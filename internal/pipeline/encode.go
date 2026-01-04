@@ -2,7 +2,7 @@ package pipeline
 
 import (
 	"bytes"
-	"errors"
+	"fmt"
 	"hash/crc32"
 	"io"
 	"squish/internal/codec"
@@ -19,7 +19,7 @@ func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize uint64, ch
 	fw := frame.NewFrameWriter(dst, header) // make a framewriter
 	err := fw.Ready()                       // write the header
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to ready frame writer: %w", err)
 	}
 	defer fw.Close()                               // defer the close to write EOS block
 	blockSize = min(blockSize, frame.MaxBlockSize) // validate blockSize first
@@ -27,7 +27,7 @@ func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize uint64, ch
 		blockReader := io.LimitedReader{R: src, N: int64(blockSize)} // make a new LimitedReader
 		data, err := io.ReadAll(&blockReader)                        // read it all in from the src
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to read in from source: %w", err)
 		}
 		uncompressedLength := len(data)
 		if uncompressedLength == 0 {
@@ -40,11 +40,11 @@ func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize uint64, ch
 		for _, codecID := range codecIDs {
 			currentCodec, ok := codec.CodecMap[codecID]
 			if !ok {
-				return errors.New("Invalid codec ID")
+				return fmt.Errorf("invalid codec ID")
 			}
 			data, err = currentCodec.EncodeBlock(data) // encode it
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to encode block of data with codec %d: %w", codecID, err)
 			}
 		}
 		if checksumMode&frame.CompressedChecksum > 0 {
@@ -59,7 +59,7 @@ func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize uint64, ch
 		}
 		err = fw.WriteBlock(block, bytes.NewReader(data)) // write the block
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to write encoded block: %w", err)
 		}
 	}
 	return nil

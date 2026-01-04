@@ -27,7 +27,8 @@ func (br *BitReader) ReadBits(nbits int) ([]byte, error) {
 		bytes := make([]byte, (nbits-br.Nbits+7)/8)
 		_, err := io.ReadFull(br.Reader, bytes)
 		if err != nil {
-			return out, fmt.Errorf("bitreader error when reading %d bytes: %v", len(out), err)
+			//return out, err
+			return out, fmt.Errorf("bitreader error when reading %d bytes: %w", len(out), err)
 		}
 		rem := nbits % 8 // get the remainder of bits desired for the MSByte
 		if rem == 0 {

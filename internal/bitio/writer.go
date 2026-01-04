@@ -43,7 +43,7 @@ func (bw *BitWriter) WriteBits(bytes []byte, nbits int) error {
 	}
 	_, err := bw.Writer.Write(out) // write the bytes
 	if err != nil {
-		return fmt.Errorf("bitwriter error when writing %d bytes: %v", len(out), err)
+		return fmt.Errorf("bitwriter error when writing %d bytes: %w", len(out), err)
 	}
 	return nil
 }
@@ -57,7 +57,7 @@ func (bw *BitWriter) Flush() (int, error) {
 	if padding != 0 {
 		err := bw.WriteBits([]byte{0}, padding)
 		if err != nil {
-			return padding, fmt.Errorf("bitwriter error when flushing: %v", err)
+			return padding, fmt.Errorf("bitwriter error when flushing: %w", err)
 		}
 		bw.Buffer = 0
 		bw.Nbits = 0

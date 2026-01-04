@@ -26,17 +26,17 @@ func Decode(src io.Reader, dst io.Writer) error {
 		data := make([]byte, block.CSize)
 		in, err := io.ReadFull(payload, data) // dump payload to byte slice
 		if in != int(block.CSize) {           // verify compressed payload size
-			return fmt.Errorf("Payload does not match CSize")
+			return errors.New("compressed payload does not match CSize")
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to read in payload: %w", err)
 		}
 		blockCS := block.Checksum
 		if fr.Header.ChecksumMode&frame.CompressedChecksum > 0 {
-			csum := uint64(crc32.ChecksumIEEE(data))
+			csm := uint64(crc32.ChecksumIEEE(data))
 			exp := (1<<(8*crc32.Size) - 1) & blockCS
-			if csum != exp {
-				return fmt.Errorf("Mismatched checksum for compressed payload: got %08x - expected %08x", csum, exp)
+			if csm != exp {
+				return fmt.Errorf("mismatched compressed payload checksum: got %08x - expected %08x", csm, exp)
 			}
 			blockCS = blockCS >> (8 * crc32.Size)
 		}
@@ -45,10 +45,10 @@ func Decode(src io.Reader, dst io.Writer) error {
 			codecList = block.Codec
 		}
 		lossless := true
-		for _, codecID := range codecList {
-			currentCodec, ok := codec.CodecMap[codecID] // determine the codec to use
+		for i := range len(codecList) - 1 {
+			currentCodec, ok := codec.CodecMap[codecList[len(codecList)-1-i]] // determine the codec to use
 			if !ok {
-				return errors.New("Invalid codec ID")
+				return fmt.Errorf("invalid codec ID")
 			}
 			data, err = currentCodec.DecodeBlock(data) // decode it
 			if err != nil {
@@ -59,18 +59,18 @@ func Decode(src io.Reader, dst io.Writer) error {
 			}
 		}
 		if fr.Header.ChecksumMode&frame.UncompressedChecksum > 0 && lossless {
-			csum := uint64(crc32.ChecksumIEEE(data))
+			csm := uint64(crc32.ChecksumIEEE(data))
 			exp := (1<<(8*crc32.Size) - 1) & blockCS
-			if csum != exp {
-				return fmt.Errorf("Mismatched checksum for uncompressed payload: got %08x - expected %08x", csum, exp)
+			if csm != exp {
+				return fmt.Errorf("mismatched uncompressed payload checksum: got %08x - expected %08x", csm, exp)
 			}
 		}
 		out, err := dst.Write(data)  // write it out
 		if out != int(block.USize) { // verify the uncompressed payload size
-			return fmt.Errorf("Payload does not match USize")
+			return fmt.Errorf("uncompressed payload does not match USize")
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("error when writing output of decoding")
 		}
 	}
 	return nil

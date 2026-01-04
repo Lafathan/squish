@@ -1,6 +1,6 @@
 package codec
 
-import "errors"
+import "fmt"
 
 const (
 	MaxRunLength uint8 = 255
@@ -56,7 +56,7 @@ func (RLECodec) DecodeBlock(src []byte) ([]byte, error) {
 		return []byte{}, nil
 	}
 	if srcByteLength%PairSize != 0 {
-		return []byte{}, errors.New("malformed RLE input for decoding")
+		return []byte{}, fmt.Errorf("malformed RLE input for decoding")
 	}
 	srcIndex := 0
 	for srcIndex < srcByteLength { // for each (count, byte) pair

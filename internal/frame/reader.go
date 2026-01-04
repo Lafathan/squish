@@ -20,7 +20,7 @@ func (fr *FrameReader) Ready() error {
 	// read in the header of the frame
 	header, err := ReadHeader(fr.Reader)
 	if err != nil {
-		return fmt.Errorf("frame error when reading header: %v", err)
+		return fmt.Errorf("frame error when reading header: %w", err)
 	}
 	fr.Header = header
 	return fr.Header.Valid()
@@ -34,7 +34,7 @@ func (fr *FrameReader) Next() (Block, io.Reader, error) {
 	// read in the block header
 	block, err := ReadBlock(fr)
 	if err != nil {
-		return block, nil, fmt.Errorf("frame error when reading block: %v", err)
+		return block, nil, fmt.Errorf("frame error when reading block: %w", err)
 	}
 	// validity check
 	blockError := block.Valid()
@@ -52,7 +52,7 @@ func (fr *FrameReader) Drop() error {
 	if fr.ActivePayload != nil && fr.ActivePayload.N > 0 {
 		_, err := io.Copy(io.Discard, fr.ActivePayload)
 		if err != nil {
-			return fmt.Errorf("frame error when skipping payload: %v", err)
+			return fmt.Errorf("frame error when skipping payload: %w", err)
 		}
 	}
 	fr.ActivePayload = nil
@@ -64,7 +64,7 @@ func (fr *FrameReader) ReadBytes(n int) ([]byte, error) {
 	bytes := make([]byte, n)
 	_, err := io.ReadFull(fr.Reader, bytes)
 	if err != nil {
-		return bytes, fmt.Errorf("frame error when reading %d bits: %v", n, err)
+		return bytes, fmt.Errorf("frame error when reading %d bits: %w", n, err)
 	}
 	return bytes, nil
 }

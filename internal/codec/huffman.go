@@ -3,6 +3,8 @@ package codec
 import (
 	"bytes"
 	"container/heap"
+	"errors"
+	"fmt"
 	"io"
 	"squish/internal/bitio"
 )
@@ -140,12 +142,12 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, error) {
 	for _, b := range src {
 		err = bw.WriteBits(d[b].bits, int(d[b].length)) // write the new bits for each symbol
 		if err != nil {
-			return []byte{}, err
+			return []byte{}, fmt.Errorf("error while writing bits during huffman encoding: %w", err)
 		}
 	}
 	pad, err := bw.Flush() // flush it and report back the number of pad bits
 	if err != nil {
-		return []byte{}, err
+		return []byte{}, fmt.Errorf("error while flushing bitwriter during huffman encoding: %w", err)
 	}
 	out := append([]byte{byte(pad)}, outBuffer.Bytes()...)
 	return out, nil
@@ -180,20 +182,20 @@ func DeserializeHuffmanDictionary(br io.ByteReader) (map[byte]*HCode, error) {
 	for {
 		bitLength, err := br.ReadByte() // read in the bitlength
 		if err != nil {
-			return dict, err
+			return dict, fmt.Errorf("error while reading bit length from huffman code dictionary: %w", err)
 		}
 		if bitLength == 0 { // zero bit length marks the end of the dictionary
 			break
 		}
 		byteVal, err := br.ReadByte() // read in the symbol
 		if err != nil {
-			return dict, err
+			return dict, fmt.Errorf("error while reading symbol from huffman code dictionary: %w", err)
 		}
 		byteArray := []byte{} // read in all the bytes of bits
 		for range (bitLength + 7) / 8 {
 			b, err := br.ReadByte()
 			if err != nil {
-				return dict, err
+				return dict, fmt.Errorf("error while reading %d bits for symbol %s from huffman code dictionary: %w", bitLength, string(byteVal), err)
 			}
 			byteArray = append(byteArray, b)
 		}
@@ -209,18 +211,18 @@ func (HUFFMANCodec) DecodeBlock(src []byte) ([]byte, error) {
 	br := bytes.NewBuffer(src)    // create a byte buffer for reading bytes
 	padBits, err := br.ReadByte() // read in the padded bits byte
 	if err != nil {
-		return []byte{}, err
+		return []byte{}, fmt.Errorf("error while reading padded bits byte in huffman decoding: %w", err)
 	}
 	d, err := DeserializeHuffmanDictionary(br) // get the Huffman code dictionary
 	if err != nil {
-		return []byte{}, err
+		return []byte{}, fmt.Errorf("error while deserializing huffman code dictionary: %w", err)
 	}
 	t := GetHuffmanTreeFromDict(d)                    // build the Huffman tree
 	inBuffer := bitio.NewBitReader(br)                // create a bitreader and traverse the tree with bits
 	outBuffer := new(bytes.Buffer)                    //create a new buffer to write to
 	padBuffer, err := inBuffer.ReadBits(int(padBits)) // a padding buffer to keep from reading padded bits
 	if err != nil {
-		return outBuffer.Bytes(), nil
+		return outBuffer.Bytes(), fmt.Errorf("error while reading in initial %d bits from source in huffman decoding: %w", padBits, err)
 	}
 	node := t
 	for {
@@ -228,8 +230,11 @@ func (HUFFMANCodec) DecodeBlock(src []byte) ([]byte, error) {
 			bit := (padBuffer[0] >> ((padBits - 1) % 8)) & 0x01
 			node = node.children[bit]           // got to the appropriate child node
 			newBit, err := inBuffer.ReadBits(1) // get the next bit
-			if err != nil {
+			if errors.Is(err, io.EOF) {
 				break
+			} else if err != nil {
+				print(err.Error())
+				return outBuffer.Bytes(), fmt.Errorf("error while reading bit from source in huffman decoding: %w", err)
 			}
 			padBuffer = ShiftByteSliceLeft(padBuffer, padBits)
 			padBuffer[len(padBuffer)-1] |= newBit[0]

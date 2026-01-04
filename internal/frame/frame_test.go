@@ -13,7 +13,7 @@ func TestWriteRead(t *testing.T) {
 	headers := []Header{
 		{Key: MagicKey, Codec: []uint8{codec.RAW}, ChecksumMode: NoChecksum},
 		{Key: MagicKey, Codec: []uint8{codec.RAW}, ChecksumMode: UncompressedChecksum},
-		{Key: MagicKey, Codec: []uint8{codec.RAW}, ChecksumMode: CompressedChecksum},
+		{Key: MagicKey, Codec: []uint8{codec.RAW, codec.RLE}, ChecksumMode: CompressedChecksum},
 		{Key: MagicKey, Codec: []uint8{codec.RAW}, ChecksumMode: UncompressedChecksum | CompressedChecksum},
 	}
 	blocks := []Block{
