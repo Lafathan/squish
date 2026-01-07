@@ -1,11 +1,11 @@
 package main
 
 import (
-	"fmt"
 	"os"
+	"squish/internal/cli"
 )
 
 func main() {
 	args := os.Args
-	fmt.Printf("Found %d args: %v\n", len(args), args)
+	cli.Run(args[1:])
 }

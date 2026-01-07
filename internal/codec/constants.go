@@ -16,6 +16,13 @@ var CodecMap = map[uint8]Codec{
 	HUFFMAN: HUFFMANCodec{},
 }
 
+// codec string to codec ID map
+var StringToCodecIDMap = map[string]uint8{
+	"RAW":     RAW,
+	"RLE":     RLE,
+	"HUFFMAN": HUFFMAN,
+}
+
 // codec interface
 type Codec interface {
 	EncodeBlock(src []byte) (dst []byte, err error)
