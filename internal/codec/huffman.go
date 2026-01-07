@@ -61,30 +61,23 @@ func ShiftByteSliceLeft(bytes []byte, length uint8) []byte {
 	return newBits
 }
 
-func GetFrequencyMap(src []byte) map[byte]*Node {
-	if len(src) == 0 {
-		return nil
-	}
-	freqMap := map[byte]*Node{} // build a dictionary of byte frequencies
-	for _, b := range src {     // loop through bytes
+func GetFrequencyMap(src []byte) map[byte]int {
+	freqMap := map[byte]int{} // build a dictionary of byte frequencies
+	for _, b := range src {
 		_, ok := freqMap[b] // check for existence
-		if !ok {            // create it if it doesn't exist
-			freqMap[b] = &Node{
-				nodeType:  Leaf,
-				value:     b,
-				frequency: 0,
-			}
+		if !ok {
+			freqMap[b] = 0 // create it if it doesn't exist
 		}
-		freqMap[b].frequency++ // increment the frequency
+		freqMap[b]++ // increment it
 	}
-	return freqMap // return the frequency mapping
+	return freqMap
 }
 
-func GetHuffmanTreeFromNodes(freqMap map[byte]*Node) *Node {
-	leaves := &HuffmanHeap{} // build the heap from the leaf nodes
-	heap.Init(leaves)
-	for _, v := range freqMap {
-		heap.Push(leaves, v)
+func GetHuffmanTreeFromFreqMap(freqMap map[byte]int) *Node {
+	leaves := &HuffmanHeap{}       // instantiate a heap
+	heap.Init(leaves)              // initialize it
+	for b, freq := range freqMap { // add nodes to the heap based on the freq map
+		heap.Push(leaves, &Node{nodeType: Leaf, value: b, frequency: freq})
 	}
 	for leaves.Len() > 1 {
 		l := heap.Pop(leaves).(*Node) // get the smallest left child node
@@ -133,8 +126,8 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, error) {
 	if len(src) == 0 {
 		return []byte{}, nil
 	}
-	h := GetFrequencyMap(src)                                // get freq map
-	t := GetHuffmanTreeFromNodes(h)                          // build the tree
+	f := GetFrequencyMap(src)                                // get freq map
+	t := GetHuffmanTreeFromFreqMap(f)                        // build the tree
 	d := GetHuffmanDictFromTree(t)                           // get the dictionary of codes
 	outBuffer := new(bytes.Buffer)                           // create a new buffer to write to
 	_, err := outBuffer.Write(SerializeHuffmanDictionary(d)) // write the dictionary to it
