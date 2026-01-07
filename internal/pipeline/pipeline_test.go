@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func testHelper(t *testing.T, str string, codecIDs []uint8, blockSize uint64, checksumMode uint8) {
+func testHelper(t *testing.T, str string, codecIDs []uint8, blockSize int, checksumMode uint8) {
 	encodeReader := strings.NewReader(str)
 	encodeWriter := new(strings.Builder)
 	err := Encode(encodeReader, encodeWriter, codecIDs, blockSize, checksumMode)

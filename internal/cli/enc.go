@@ -3,7 +3,10 @@ package cli
 import (
 	"flag"
 	"fmt"
+	"maps"
 	"os"
+	"slices"
+	"sort"
 	"squish/internal/codec"
 	"squish/internal/frame"
 	"squish/internal/pipeline"
@@ -22,6 +25,16 @@ func runEnc(args []string) int {
 		listCodecs = flagSet.Bool("list-codecs", false, "list supported codecs and exit")
 	)
 	flagSet.Parse(args)
+
+	var err error
+
+	// parse and display "listCodec"
+	if *listCodecs {
+		codecNames := slices.Collect(maps.Keys(codec.StringToCodecIDMap))
+		sort.Strings(codecNames)
+		fmt.Printf("%s", strings.Join(codecNames, ", "))
+		return 0
+	}
 
 	// parse codec pipeline
 	if *codecPipe == "" {
@@ -45,11 +58,11 @@ func runEnc(args []string) int {
 	}
 	var outFile *os.File
 	if output == "-" || output == "" {
-		outFile := os.Stdout
+		outFile = os.Stdout
 	} else {
-		outFile, err := os.Open(output)
+		outFile, err = os.Create(output)
 		if err != nil {
-			fmt.Printf("failed to read file %q\n\n", output)
+			fmt.Printf("failed to write file %q\n\n:%v", output, err)
 			return 0
 		}
 	}
@@ -73,6 +86,7 @@ func runEnc(args []string) int {
 	// parse the blocksize flags
 	var blockByteSize int
 	units := map[string]int{
+		"B":   1,
 		"KiB": 1 << 10,
 		"MiB": 1 << 20,
 		"KB":  1000,
@@ -90,9 +104,23 @@ func runEnc(args []string) int {
 			break
 		}
 	}
-	//TODO parse and display "listCodec"
-	//TODO make a *os.file for the input
-	pipeline.Encode(args[-1], outFile, codecList, blockByteSize, checksumFlag)
+
+	// open the input file
+	var inFile *os.File
+	input := args[len(args)-1]
+	if input == "-" || input == "" {
+		inFile = os.Stdin
+	} else {
+		inFile, err = os.Open(input)
+		if err != nil {
+			fmt.Printf("failed to read file %q\n\n", input)
+			return 0
+		}
+	}
+	defer inFile.Close()
+
+	// call the business
+	pipeline.Encode(inFile, outFile, codecList, blockByteSize, checksumFlag)
 	return 0
 }
 
@@ -101,10 +129,10 @@ func printEncHelp(fs *flag.FlagSet) {
 squish enc - compress input into a .sqz stream
 
 USAGE:
-	squish enc --codec <pipeline> [flags] [input]
+	squish enc -codec <pipeline> [flags] [input]
 
 REQUIRED:
-  --codec <pipeline>        Codec pipeline, e.g. RLE|HUFFMAN|RLE
+  -codec <pipeline>        Codec pipeline, e.g. RLE|HUFFMAN|RLE
 
 FLAGS:`)
 	fs.PrintDefaults()
@@ -115,6 +143,6 @@ PIPELINE SYNTAX:
 
 EXAMPLES:
   squish enc ./input.txt --codec RLE|HUFFMAN -o ./output.sqz
-  squish enc - --codec RLE --blocksize 128KiB -o ./out.sqz
+  squish enc - -codec RLE --blocksize 128KiB -o ./out.sqz
   squish enc ./data.bin --codec RAW -o - > data.sqz`)
 }

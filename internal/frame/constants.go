@@ -1,7 +1,7 @@
 package frame
 
 const MagicKey = "SQSH"
-const MaxBlockSize = uint64(1<<16 - 1)
+const MaxBlockSize = 1<<16 - 1
 
 // Block types
 const (

@@ -9,7 +9,7 @@ import (
 	"squish/internal/frame"
 )
 
-func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize uint64, checksumMode uint8) error {
+func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize int, checksumMode uint8) error {
 	header := frame.Header{ // build your header
 		Key:          frame.MagicKey,
 		Flags:        0x00,
