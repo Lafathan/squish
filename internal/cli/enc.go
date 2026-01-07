@@ -85,22 +85,17 @@ func runEnc(args []string) int {
 
 	// parse the blocksize flags
 	var blockByteSize int
-	units := map[string]int{
-		"B":   1,
-		"KiB": 1 << 10,
-		"MiB": 1 << 20,
-		"KB":  1000,
-		"MB":  1000000,
-	}
-	for suffix, magnitude := range units {
-		prefix, found := strings.CutSuffix(*blockSize, suffix)
+	units := [5]string{"KiB", "MiB", "KB", "MB", "B"}
+	mags := [5]int{1<<10, 1<<20, 1000, 1000000, 1}
+	for i := range 5 {
+		prefix, found := strings.CutSuffix(*blockSize, units[i])
 		if found {
 			val, err := strconv.Atoi(prefix)
 			if err != nil {
 				fmt.Printf("unknown blocksize value %q\n\n", val)
 				return 2
 			}
-			blockByteSize = val * magnitude
+			blockByteSize = val * mags[i]
 			break
 		}
 	}
