@@ -1,7 +1,6 @@
 package pipeline
 
 import (
-	"errors"
 	"fmt"
 	"hash/crc32"
 	"io"
@@ -26,7 +25,7 @@ func Decode(src io.Reader, dst io.Writer) error {
 		data := make([]byte, block.CSize)
 		in, err := io.ReadFull(payload, data) // dump payload to byte slice
 		if in != int(block.CSize) {           // verify compressed payload size
-			return errors.New("compressed payload does not match CSize")
+			return fmt.Errorf("compressed payload does not match CSize: got %d - expected %d", in, block.CSize)
 		}
 		if err != nil {
 			return fmt.Errorf("failed to read in payload: %w", err)
@@ -45,12 +44,14 @@ func Decode(src io.Reader, dst io.Writer) error {
 			codecList = block.Codec
 		}
 		lossless := true
-		for i := range len(codecList) - 1 {
+		decoded := []byte{}
+		for i := range len(codecList) {
 			currentCodec, ok := codec.CodecMap[codecList[len(codecList)-1-i]] // determine the codec to use
 			if !ok {
 				return fmt.Errorf("invalid codec ID")
 			}
-			data, err = currentCodec.DecodeBlock(data) // decode it
+			blockData, err := currentCodec.DecodeBlock(data) // decode it
+			decoded = append(decoded, blockData...)
 			if err != nil {
 				return err
 			}
@@ -65,9 +66,9 @@ func Decode(src io.Reader, dst io.Writer) error {
 				return fmt.Errorf("mismatched uncompressed payload checksum: got %08x - expected %08x", csm, exp)
 			}
 		}
-		out, err := dst.Write(data)  // write it out
-		if out != int(block.USize) { // verify the uncompressed payload size
-			return fmt.Errorf("uncompressed payload does not match USize")
+		out, err := dst.Write(decoded)           // write it out
+		if out != int(block.USize) && lossless { // verify the uncompressed payload size
+			return fmt.Errorf("uncompressed payload does not match USize: got %d - expected %d", out, block.USize)
 		}
 		if err != nil {
 			return fmt.Errorf("error when writing output of decoding")

@@ -12,8 +12,8 @@ func Run(args []string) int {
 	switch args[0] {
 	case "enc":
 		return runEnc(args[1:])
-	//case "dec":
-	//	return runDec(args[1:])
+	case "dec":
+		return runDec(args[1:])
 	//case "analyze":
 	//	return runAnalyze(args[1:])
 	default:
