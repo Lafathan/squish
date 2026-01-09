@@ -16,6 +16,9 @@ func NewBitReader(r io.Reader) *BitReader {
 }
 
 func (br *BitReader) ReadBits(nbits int) ([]byte, error) {
+	if nbits < 1 {
+		return []byte{}, nil
+	}
 	out := make([]byte, 0, (nbits-1)/8+1)
 	if nbits <= br.Nbits {
 		// easy case - all required bits are already in the buffer

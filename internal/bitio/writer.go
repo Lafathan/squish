@@ -16,6 +16,9 @@ func NewBitWriter(w io.Writer) *BitWriter {
 }
 
 func (bw *BitWriter) WriteBits(bytes []byte, nbits int) error {
+	if nbits < 1 {
+		return nil
+	}
 	if nbits > 8*len(bytes) {
 		return fmt.Errorf("bitwriter error: not enough bits in byte slice")
 	}

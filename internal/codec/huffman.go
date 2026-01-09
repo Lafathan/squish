@@ -210,27 +210,36 @@ func (HUFFMANCodec) DecodeBlock(src []byte) ([]byte, error) {
 	if err != nil {
 		return []byte{}, fmt.Errorf("error while deserializing huffman code dictionary: %w", err)
 	}
-	t := GetHuffmanTreeFromDict(d)                    // build the Huffman tree
-	inBuffer := bitio.NewBitReader(br)                // create a bitreader and traverse the tree with bits
-	outBuffer := new(bytes.Buffer)                    //create a new buffer to write to
-	padBuffer, err := inBuffer.ReadBits(int(padBits)) // a padding buffer to keep from reading padded bits
-	if err != nil {
-		return outBuffer.Bytes(), fmt.Errorf("error while reading in initial %d bits from source in huffman decoding: %w", padBits, err)
+	t := GetHuffmanTreeFromDict(d)     // build the Huffman tree
+	inBuffer := bitio.NewBitReader(br) // create a bitreader and traverse the tree with bits
+	outBuffer := new(bytes.Buffer)     // create a new buffer to write to
+	var (
+		padBuffer byte
+		newBit    []byte
+	)
+	if padBits > 0 {
+		padByte, err := inBuffer.ReadBits(int(padBits))
+		if err != nil {
+			return []byte{}, fmt.Errorf("error while reading first %d bits from source in huffman decoding: %w", padBits, err)
+		}
+		padBuffer = padByte[0]
 	}
 	node := t
 	for {
 		if node.nodeType == Branch {
-			bit := (padBuffer[0] >> ((padBits - 1) % 8)) & 0x01
-			node = node.children[bit]           // got to the appropriate child node
-			newBit, err := inBuffer.ReadBits(1) // get the next bit
+			newBit, err = inBuffer.ReadBits(1)
 			if errors.Is(err, io.EOF) {
 				break
 			} else if err != nil {
-				print(err.Error())
 				return outBuffer.Bytes(), fmt.Errorf("error while reading bit from source in huffman decoding: %w", err)
 			}
-			padBuffer = ShiftByteSliceLeft(padBuffer, padBits)
-			padBuffer[len(padBuffer)-1] |= newBit[0]
+			if padBits > 0 {
+				node = node.children[(padBuffer>>(padBits-1))&0x01]
+				padBuffer = padBuffer << 1
+				padBuffer |= newBit[0]
+			} else {
+				node = node.children[newBit[0]&0x01]
+			}
 		} else {
 			outBuffer.WriteByte(node.value) // if you are at a leaf, you have your value
 			node = t                        // reset to the root tree node
