@@ -39,3 +39,8 @@ func TestPipelineChecksumLargeBlockSize(t *testing.T) {
 	message := "Hello World!"
 	testHelper(t, message, []uint8{codec.RAW}, frame.MaxBlockSize+99, frame.CompressedChecksum|frame.UncompressedChecksum)
 }
+
+func TestPipelineMultipleCodecs(t *testing.T) {
+	message := "Hello World!"
+	testHelper(t, message, []uint8{codec.RLE, codec.HUFFMAN}, frame.MaxBlockSize, frame.NoChecksum)
+}

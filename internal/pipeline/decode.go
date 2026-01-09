@@ -22,10 +22,9 @@ func Decode(src io.Reader, dst io.Writer) error {
 		if block.BlockType == frame.EOS { // break if you reached the EOS
 			break
 		}
-		data := make([]byte, block.CSize)
-		in, err := io.ReadFull(payload, data) // dump payload to byte slice
-		if in != int(block.CSize) {           // verify compressed payload size
-			return fmt.Errorf("compressed payload does not match CSize: got %d - expected %d", in, block.CSize)
+		data, err := io.ReadAll(payload)
+		if len(data) != int(block.CSize) {
+			return fmt.Errorf("compressed payload does not match CSize: got %d - expected %d", len(data), block.CSize)
 		}
 		if err != nil {
 			return fmt.Errorf("failed to read in payload: %w", err)
@@ -44,14 +43,12 @@ func Decode(src io.Reader, dst io.Writer) error {
 			codecList = block.Codec
 		}
 		lossless := true
-		decoded := []byte{}
 		for i := range len(codecList) {
 			currentCodec, ok := codec.CodecMap[codecList[len(codecList)-1-i]] // determine the codec to use
 			if !ok {
 				return fmt.Errorf("invalid codec ID")
 			}
-			blockData, err := currentCodec.DecodeBlock(data) // decode it
-			decoded = append(decoded, blockData...)
+			data, err = currentCodec.DecodeBlock(data) // decode it
 			if err != nil {
 				return err
 			}
@@ -66,7 +63,7 @@ func Decode(src io.Reader, dst io.Writer) error {
 				return fmt.Errorf("mismatched uncompressed payload checksum: got %08x - expected %08x", csm, exp)
 			}
 		}
-		out, err := dst.Write(decoded)           // write it out
+		out, err := dst.Write(data)              // write it out
 		if out != int(block.USize) && lossless { // verify the uncompressed payload size
 			return fmt.Errorf("uncompressed payload does not match USize: got %d - expected %d", out, block.USize)
 		}
