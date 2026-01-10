@@ -15,7 +15,7 @@ type Block struct {
 	Checksum  uint64  // checksum value 4 bytes for uncompressed, 4 bytes for compressed
 }
 
-func (b *Block) Valid() error {
+func (b *Block) valid() error {
 	if (b.BlockType != EOS) && (b.BlockType != DefaultCodec) && (b.BlockType != BlockCodec) {
 		return errors.New("invalid block type found")
 	}
@@ -25,7 +25,7 @@ func (b *Block) Valid() error {
 	return nil
 }
 
-func (block1 Block) Equal(block2 Block) bool {
+func (block1 Block) equal(block2 Block) bool {
 	a := block1.BlockType == block2.BlockType
 	b := block1.USize == block2.USize
 	c := block1.CSize == block2.CSize
@@ -49,7 +49,7 @@ func (b Block) String() string {
 	return s
 }
 
-func ReadBlock(fr *FrameReader) (Block, error) {
+func readBlock(fr *frameReader) (Block, error) {
 	var b Block
 	var err error
 	// get block type
@@ -103,10 +103,10 @@ func ReadBlock(fr *FrameReader) (Block, error) {
 	return b, nil
 }
 
-func WriteBlock(fw *FrameWriter, b Block) error {
+func writeBlock(fw *frameWriter, b Block) error {
 	// if EOS block is being written
 	if b.BlockType == EOS {
-		_, err := fw.Writer.Write([]byte{b.BlockType})
+		_, err := fw.writer.Write([]byte{b.BlockType})
 		return err
 	}
 	// build block header
@@ -118,15 +118,15 @@ func WriteBlock(fw *FrameWriter, b Block) error {
 	}
 	bytes = binary.AppendUvarint(bytes, b.USize)
 	bytes = binary.AppendUvarint(bytes, b.CSize)
-	hasCCS := fw.Header.ChecksumMode&CompressedChecksum != 0
-	hasUCS := fw.Header.ChecksumMode&UncompressedChecksum != 0
+	hasCCS := fw.header.ChecksumMode&CompressedChecksum != 0
+	hasUCS := fw.header.ChecksumMode&UncompressedChecksum != 0
 	if hasUCS && hasCCS {
 		bytes = binary.BigEndian.AppendUint64(bytes, b.Checksum)
 	} else if hasUCS || hasCCS {
 		bytes = binary.BigEndian.AppendUint32(bytes, uint32(b.Checksum))
 	}
 	// write the bytes
-	_, err := fw.Writer.Write(bytes)
+	_, err := fw.writer.Write(bytes)
 	if err != nil {
 		return fmt.Errorf("error in writing block - %s: %w", b, err)
 	}

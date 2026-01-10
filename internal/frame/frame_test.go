@@ -27,7 +27,7 @@ func TestWriteRead(t *testing.T) {
 		fw := NewFrameWriter(io.Writer(&str), h)
 		err := fw.Ready()
 		if err != nil {
-			t.Fatalf("Failed to ready FrameWriter %s: %v", fw, err)
+			t.Fatalf("Failed to ready FrameWriter: %v", err)
 		}
 		testBlocks := []Block{blocks[i], blocks[i]}
 		for i, b := range testBlocks {
@@ -43,7 +43,7 @@ func TestWriteRead(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to ready FrameReader: %v", err)
 		}
-		if !fr.Header.Equal(h) {
+		if !fr.Header.equal(h) {
 			t.Fatalf("Header mismatch in WriteRead test %d\n%s\n%s", i, h, fr.Header)
 		}
 		for i := range len(testBlocks) - 1 {
@@ -51,7 +51,7 @@ func TestWriteRead(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to read block %d: %v", i, err)
 			}
-			if !block.Equal(testBlocks[i]) {
+			if !block.equal(testBlocks[i]) {
 				t.Fatalf("Mismatch in header of block %d, %s", i, block)
 			}
 			bytes, err := io.ReadAll(payloadReader)
@@ -73,7 +73,7 @@ func TestWriteRead(t *testing.T) {
 			t.Fatalf("Missed early read error: %v", err)
 		}
 		err = fr.Drop()
-		if fr.ActivePayload != nil {
+		if fr.activePayload != nil {
 			t.Fatalf("Failed to drop active payload")
 		}
 		b, _, err := fr.Next()
@@ -86,12 +86,12 @@ func TestWriteRead(t *testing.T) {
 func TestHeaderValid(t *testing.T) {
 	var badHeader Header
 	badHeader = Header{Key: "SQSh"}
-	err := badHeader.Valid()
+	err := badHeader.valid()
 	if err == nil {
 		t.Fatalf("Missed invalid magic key: %v", err)
 	}
 	badHeader = Header{Key: MagicKey, ChecksumMode: 4}
-	err = badHeader.Valid()
+	err = badHeader.valid()
 	if err == nil {
 		t.Fatalf("Missed invalid maximum uncompressed size: %v", err)
 	}
@@ -100,12 +100,12 @@ func TestHeaderValid(t *testing.T) {
 func TestBlockValid(t *testing.T) {
 	var badBlock Block
 	badBlock = Block{BlockType: 4}
-	err := badBlock.Valid()
+	err := badBlock.valid()
 	if err == nil {
 		t.Fatalf("Missed invalid blocktype: %v", err)
 	}
 	badBlock = Block{BlockType: DefaultCodec, USize: MaxBlockSize + 1}
-	err = badBlock.Valid()
+	err = badBlock.valid()
 	if err == nil {
 		t.Fatalf("Missed invalid maximum uncompressed size: %v", err)
 	}

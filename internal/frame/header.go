@@ -13,7 +13,7 @@ type Header struct {
 	ChecksumMode uint8   // per block checksum mode
 }
 
-func (h *Header) Valid() error {
+func (h *Header) valid() error {
 	// make sure the header starts with the valid start key
 	if h.Key != MagicKey {
 		return errors.New("invalid header start key")
@@ -32,7 +32,7 @@ func (h Header) String() string {
 	return s
 }
 
-func (header1 Header) Equal(header2 Header) bool {
+func (header1 Header) equal(header2 Header) bool {
 	a := header1.Key == header2.Key
 	b := header1.Flags == header2.Flags
 	c := header1.ChecksumMode == header2.ChecksumMode
@@ -46,7 +46,7 @@ func (header1 Header) Equal(header2 Header) bool {
 	return a && b && c && d
 }
 
-func ReadHeader(r io.Reader) (Header, error) {
+func readHeader(r io.Reader) (Header, error) {
 	var h Header
 	// read in the header of the frame
 	bytes := make([]byte, 7)
@@ -67,7 +67,7 @@ func ReadHeader(r io.Reader) (Header, error) {
 	return h, nil
 }
 
-func WriteHeader(w io.Writer, h Header) error {
+func writeHeader(w io.Writer, h Header) error {
 	// build byte array for header
 	bytes := []byte(h.Key)
 	bytes = append(bytes, h.Flags)

@@ -3,8 +3,8 @@ package codec
 import "fmt"
 
 const (
-	MaxRunLength uint8 = 255
-	PairSize     int   = 2
+	maxRunLength uint8 = 255
+	pairSize     int   = 2
 )
 
 type RLECodec struct{}
@@ -14,12 +14,12 @@ func (RLECodec) EncodeBlock(src []byte) ([]byte, error) {
 	if srcByteLength == 0 {
 		return []byte{}, nil
 	}
-	outByteLength := PairSize    // how long will output be
+	outByteLength := pairSize    // how long will output be
 	currentRunLength := uint8(0) // keep track of the current length of run
 	currentRunByte := src[0]     // keep track of the current repeating currentRunByte
 	for _, srcByte := range src {
-		if currentRunByte != srcByte || currentRunLength >= MaxRunLength {
-			outByteLength += PairSize
+		if currentRunByte != srcByte || currentRunLength >= maxRunLength {
+			outByteLength += pairSize
 			currentRunByte = srcByte
 			currentRunLength = 1
 		} else {
@@ -35,7 +35,7 @@ func (RLECodec) EncodeBlock(src []byte) ([]byte, error) {
 			encodedMessage[currentEncodedLength] = currentRunLength // write the number of reapeats
 			currentEncodedLength++                                  // move to the next element
 			encodedMessage[currentEncodedLength] = currentRunByte   // write the byte repeated
-		} else if src[srcIndex] == currentRunByte && currentRunLength < MaxRunLength {
+		} else if src[srcIndex] == currentRunByte && currentRunLength < maxRunLength {
 			currentRunLength += 1 // increment counter if byte repeats and not over the repeat limit
 		} else {
 			encodedMessage[currentEncodedLength] = currentRunLength // write the number of reapeats
@@ -55,13 +55,13 @@ func (RLECodec) DecodeBlock(src []byte) ([]byte, error) {
 	if srcByteLength == 0 {
 		return []byte{}, nil
 	}
-	if srcByteLength%PairSize != 0 {
+	if srcByteLength%pairSize != 0 {
 		return []byte{}, fmt.Errorf("malformed RLE input for decoding")
 	}
 	srcIndex := 0
 	for srcIndex < srcByteLength { // for each (count, byte) pair
 		outByteLength += int(src[srcIndex]) // count how many bytes will be added
-		srcIndex += PairSize                // jump to the next pair
+		srcIndex += pairSize                // jump to the next pair
 	}
 	decodedMessage := make([]byte, outByteLength) // make the array you need for output
 	currentOutIndex := 0                          // keep track of where you are in the output

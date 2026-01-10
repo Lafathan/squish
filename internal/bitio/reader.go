@@ -5,35 +5,35 @@ import (
 	"io"
 )
 
-type BitReader struct {
-	Reader io.Reader // io.reader for reading a stream
-	Buffer uint64    // buffer holding current streamed bits
-	Nbits  int       // number of bits currently not read from buffer (cursor)
+type bitReader struct {
+	reader io.Reader // io.reader for reading a stream
+	buffer uint64    // buffer holding current streamed bits
+	nBits  int       // number of bits currently not read from buffer (cursor)
 }
 
-func NewBitReader(r io.Reader) *BitReader {
-	return &BitReader{Reader: r}
+func NewBitReader(r io.Reader) *bitReader {
+	return &bitReader{reader: r}
 }
 
-func (br *BitReader) ReadBits(bits int) (uint64, error) {
+func (br *bitReader) ReadBits(bits int) (uint64, error) {
 	// read more bytes to have enough bits
-	if br.Nbits < bits {
+	if br.nBits < bits {
 		// calculate the number of bytes needed
-		bytesToRead := (int(bits) - int(br.Nbits) + 7) / 8
+		bytesToRead := (int(bits) - int(br.nBits) + 7) / 8
 		// return if reading too many bytes at once
-		if int(br.Nbits)+bytesToRead*8 > 64 {
+		if int(br.nBits)+bytesToRead*8 > 64 {
 			return 0, fmt.Errorf("bitreader error when reading %d bytes: %w", bytesToRead, io.ErrShortBuffer)
 		}
 		bytesBuffer := make([]byte, bytesToRead)
-		_, err := io.ReadFull(br.Reader, bytesBuffer)
+		_, err := io.ReadFull(br.reader, bytesBuffer)
 		if err != nil {
 			return 0, fmt.Errorf("bitreader error when reading %d bytes: %w", bytesToRead, err)
 		}
 		for _, b := range bytesBuffer {
 			// pad the buffer and 'or' it add the new byte to the buffer
-			br.Buffer = (br.Buffer << 8) | uint64(b)
+			br.buffer = (br.buffer << 8) | uint64(b)
 			// add to the total of bits contained in the buffer
-			br.Nbits += 8
+			br.nBits += 8
 		}
 	}
 	// you want 6 bits
@@ -50,8 +50,8 @@ func (br *BitReader) ReadBits(bits int) (uint64, error) {
 	} else {
 		mask = (uint64(1) << bits) - 1
 	}
-	out := (br.Buffer >> (br.Nbits - bits)) & mask
-	br.Nbits -= bits                 // count down to not re-read bits
-	br.Buffer &= (1 << br.Nbits) - 1 // mask it down to prevent overflow
+	out := (br.buffer >> (br.nBits - bits)) & mask
+	br.nBits -= bits                 // count down to not re-read bits
+	br.buffer &= (1 << br.nBits) - 1 // mask it down to prevent overflow
 	return out, nil
 }
