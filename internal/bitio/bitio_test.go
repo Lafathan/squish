@@ -55,7 +55,7 @@ func TestFlush(t *testing.T) {
 	// test that the flush command pads the bits to the nearest byte size
 	buf := new(bytes.Buffer)
 	bw := NewBitWriter(buf)
-	err := bw.WriteBits([]byte{1}, 6)
+	err := bw.WriteBits(1, 6)
 	if err != nil {
 		t.Fatalf("Failed to write bits before testing flush: %v", err)
 	}

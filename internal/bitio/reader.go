@@ -7,7 +7,7 @@ import (
 
 type BitReader struct {
 	Reader io.Reader // io.reader for reading a stream
-	Buffer byte      // buffer holding current streamed bits
+	Buffer uint64    // buffer holding current streamed bits
 	Nbits  int       // number of bits currently not read from buffer (cursor)
 }
 
@@ -15,43 +15,43 @@ func NewBitReader(r io.Reader) *BitReader {
 	return &BitReader{Reader: r}
 }
 
-func (br *BitReader) ReadBits(nbits int) ([]byte, error) {
-	if nbits < 1 {
-		return []byte{}, nil
-	}
-	out := make([]byte, 0, (nbits-1)/8+1)
-	if nbits <= br.Nbits {
-		// easy case - all required bits are already in the buffer
-		out = append(out, br.Buffer>>(br.Nbits-nbits)) // put the bits in the output
-		br.Buffer &= (1<<(br.Nbits-nbits) - 1)         // shift the buffer by how many wanted
-		br.Nbits -= nbits                              // track how many are still unread
-	} else {
-		// harder case - more bytes are required to be read in
-		bytes := make([]byte, (nbits-br.Nbits+7)/8)
-		_, err := io.ReadFull(br.Reader, bytes)
+func (br *BitReader) ReadBits(bits int) (uint64, error) {
+	// read more bytes to have enough bits
+	if br.Nbits < bits {
+		// calculate the number of bytes needed
+		bytesToRead := (int(bits) - int(br.Nbits) + 7) / 8
+		// return if reading too many bytes at once
+		if int(br.Nbits)+bytesToRead*8 > 64 {
+			return 0, fmt.Errorf("bitreader error when reading %d bytes: %w", bytesToRead, io.ErrShortBuffer)
+		}
+		bytesBuffer := make([]byte, bytesToRead)
+		_, err := io.ReadFull(br.Reader, bytesBuffer)
 		if err != nil {
-			//return out, err
-			return out, fmt.Errorf("bitreader error when reading %d bytes: %w", len(out), err)
+			return 0, fmt.Errorf("bitreader error when reading %d bytes: %w", bytesToRead, err)
 		}
-		rem := nbits % 8 // get the remainder of bits desired for the MSByte
-		if rem == 0 {
-			rem = 8
-		}
-		for _, b := range bytes {
-			if br.Nbits >= rem {
-				// when the entire leading MSB is contained in the buffer bits
-				shift := br.Nbits - rem             // determine shift required to take from buffer
-				out = append(out, br.Buffer>>shift) // add MSB to output
-				br.Buffer &= (1<<shift - 1)         // make out what you read frombuffer
-				br.Nbits = shift                    // reduce unread bits by what you read from buffer
-				rem = 8                             // all future output bytes will be 8 bits
-			}
-			shift := rem - br.Nbits                              // determine shift required to take from buffer
-			out = append(out, (br.Buffer<<shift)|(b>>(8-shift))) // shift buffer, append from MSb from read byte
-			br.Buffer = b & (1<<(8-shift) - 1)                   // the new buffer is the LSb of the read byte
-			br.Nbits = 8 - shift                                 // unread bits is updated
-			rem = 8                                              // all future output bytes will be 8 bits
+		for _, b := range bytesBuffer {
+			// pad the buffer and 'or' it add the new byte to the buffer
+			br.Buffer = (br.Buffer << 8) | uint64(b)
+			// add to the total of bits contained in the buffer
+			br.Nbits += 8
 		}
 	}
+	// you want 6 bits
+	// buffer = 10
+	// buffer = 1011001100 (read in another byte)
+	// mask = 1000000 - 1 = 0111111 (bit mask for six bits you want)
+	// right shift the buffer by unread bits - desired bits (10 - 6 = 4)
+	// shifted buffer = 0000101100
+	// and with mask  =     111111 (prevent high bits from leaking through)
+	// result         =     101100var mask uint64
+	var mask uint64
+	if bits == 64 {
+		mask = ^uint64(0)
+	} else {
+		mask = (uint64(1) << bits) - 1
+	}
+	out := (br.Buffer >> (br.Nbits - bits)) & mask
+	br.Nbits -= bits                 // count down to not re-read bits
+	br.Buffer &= (1 << br.Nbits) - 1 // mask it down to prevent overflow
 	return out, nil
 }

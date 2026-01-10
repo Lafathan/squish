@@ -9,11 +9,11 @@ func HuffmanEncodeDecode(message string, t *testing.T) {
 	hc := HUFFMANCodec{}
 	coded, err := hc.EncodeBlock([]byte(message))
 	if err != nil {
-		t.Fatalf("Huffman encoding failed")
+		t.Fatalf("Huffman encoding failed: %v", err)
 	}
 	decoded, err := hc.DecodeBlock(coded)
 	if err != nil {
-		t.Fatalf("Huffman decoding failed")
+		t.Fatalf("Huffman decoding failed: %v", err)
 	}
 	if message != string(decoded) {
 		t.Fatalf("Huffman encoding mismatch: got %s - expected %s", string(decoded), message)
