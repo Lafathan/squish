@@ -158,7 +158,7 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, error) {
 	return out, nil
 }
 
-func GetHuffmanTreeFromDict(d map[byte]*HCode) *Node {
+func GetHuffmanTreeFromDict(d [256]*HCode) *Node {
 	root := Node{nodeType: Branch}                                 // make an empty root node
 	var buildTree func(n *Node, val byte, bits []byte, length int) // define for recursion
 	buildTree = func(n *Node, val byte, bits []byte, length int) {
@@ -177,36 +177,43 @@ func GetHuffmanTreeFromDict(d map[byte]*HCode) *Node {
 		}
 	}
 	for k, v := range d {
-		buildTree(&root, k, v.bits, v.length)
+		if v != nil {
+			buildTree(&root, byte(k), v.bits, v.length)
+		}
 	}
 	return &root
 }
 
-func DeserializeHuffmanDictionary(br io.ByteReader) (map[byte]*HCode, error) {
-	dict := map[byte]*HCode{} // make a dictionary
+func DeserializeHuffmanDictionary(br io.Reader) ([256]*HCode, error) {
+	HCodeMap := [256]*HCode{} // make an array to store all Huffman codes
+	temp := make([]byte, 1)   // make a 1 byte slice buffer to read into
+	var (
+		bitLength uint8
+		byteVal   byte
+		err       error
+	)
 	for {
-		bitLength, err := br.ReadByte() // read in the bitlength
+		_, err = io.ReadFull(br, temp) // read in the bit length
 		if err != nil {
-			return dict, fmt.Errorf("error while reading bit length from huffman code dictionary: %w", err)
+			return HCodeMap, fmt.Errorf("error while reading bit length from huffman code dictionary: %w", err)
 		}
+		bitLength = temp[0]
 		if bitLength == 0 { // zero bit length marks the end of the dictionary
 			break
 		}
-		byteVal, err := br.ReadByte() // read in the symbol
+		_, err = io.ReadFull(br, temp) // read in the byte value
 		if err != nil {
-			return dict, fmt.Errorf("error while reading symbol from huffman code dictionary: %w", err)
+			return HCodeMap, fmt.Errorf("error while reading symbol from huffman code dictionary: %w", err)
 		}
-		byteArray := []byte{} // read in all the bytes of bits
-		for range (bitLength + 7) / 8 {
-			b, err := br.ReadByte()
-			if err != nil {
-				return dict, fmt.Errorf("error while reading %d bits for symbol %s from huffman code dictionary: %w", bitLength, string(byteVal), err)
-			}
-			byteArray = append(byteArray, b)
+		byteVal = temp[0]
+		byteArray := make([]byte, (bitLength+7)/8) // make a byte slice to read in the bit stream bytes
+		_, err = io.ReadFull(br, byteArray)
+		if err != nil {
+			return HCodeMap, fmt.Errorf("error while reading bit stream for symbol from huffman code dictionary: %w", err)
 		}
-		dict[byteVal] = &HCode{bits: byteArray, length: int(bitLength)} // store the HCode in the dictionary
+		HCodeMap[byteVal] = &HCode{bits: byteArray, length: int(bitLength)} // store the HCode in the array
 	}
-	return dict, nil
+	return HCodeMap, nil
 }
 
 func (HUFFMANCodec) DecodeBlock(src []byte) ([]byte, error) {
