@@ -25,16 +25,14 @@ func (br *bitReader) ReadBits(bits int) (uint64, error) {
 		if int(br.nBits)+bytesToRead*8 > 64 {
 			return 0, fmt.Errorf("bitreader error when reading %d bytes: %w", bytesToRead, io.ErrShortBuffer)
 		}
-		//bytesBuffer := make([]byte, bytesToRead)
+		// read in the new data
 		_, err := io.ReadFull(br.reader, br.readBuffer[:bytesToRead])
-		//_, err := io.ReadFull(br.reader, bytesBuffer)
 		if err != nil {
 			return 0, fmt.Errorf("bitreader error when reading %d bytes: %w", bytesToRead, err)
 		}
-		//for _, b := range bytesBuffer {
+		// add in the new data to the buffer
 		for i := range bytesToRead {
 			// pad the buffer and 'or' it add the new byte to the buffer
-			//br.buffer = (br.buffer << 8) | uint64(b)
 			br.buffer = (br.buffer << 8) | uint64(br.readBuffer[i])
 			// add to the total of bits contained in the buffer
 			br.nBits += 8
