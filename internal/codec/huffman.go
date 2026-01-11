@@ -90,12 +90,12 @@ func getHuffmanTreeFromFreqMap(freqMap []int) *node {
 	return heap.Pop(leaves).(*node)
 }
 
-func getHuffmanDictFromTree(tree *node) map[byte]*hCode {
-	dict := map[byte]*hCode{}           // store the byte - code pairs
+func getHuffmanDictFromTree(tree *node) *[256]hCode {
+	dict := [256]hCode{}                // store the byte - code pairs
 	var getCode func(n *node, c *hCode) // define a func for recursive depth first search
 	getCode = func(n *node, c *hCode) {
 		if n.nodeType == leaf {
-			dict[n.value] = c // update the dictionary when you arrive at a leaf
+			dict[n.value] = *c // update the dictionary when you arrive at a leaf
 		} else {
 			lBits := shiftByteSliceLeft(c.bits, c.length)
 			rBits := append([]byte(nil), lBits...)
@@ -105,16 +105,18 @@ func getHuffmanDictFromTree(tree *node) map[byte]*hCode {
 		}
 	}
 	getCode(tree, &hCode{bits: []byte{}, length: 0})
-	return dict
+	return &dict
 }
 
-func serializeHuffmanDictionary(d map[byte]*hCode) []byte {
+func serializeHuffmanDictionary(d *[256]hCode) []byte {
 	// uint8 bit length, byte value, packed bytes for bit code
 	out := []byte{}
 	for k, v := range d {
-		out = append(out, uint8(v.length))
-		out = append(out, k)
-		out = append(out, v.bits...)
+		if v.length > 0 {
+			out = append(out, byte(v.length))
+			out = append(out, byte(k))
+			out = append(out, v.bits...)
+		}
 	}
 	out = append(out, byte(0)) // a zero bit length marks the end of the dictionary
 	return out
@@ -158,7 +160,7 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, error) {
 	return out, nil
 }
 
-func getHuffmanTreeFromDict(d [256]*hCode) *node {
+func getHuffmanTreeFromDict(d *[256]hCode) *node {
 	root := node{nodeType: branch}                                 // make an empty root node
 	var buildTree func(n *node, val byte, bits []byte, bitPos int) // define for recursion
 	buildTree = func(n *node, val byte, bits []byte, bitPos int) {
@@ -176,15 +178,15 @@ func getHuffmanTreeFromDict(d [256]*hCode) *node {
 		}
 	}
 	for k, v := range d {
-		if v != nil {
+		if v.length > 0 {
 			buildTree(&root, byte(k), v.bits, v.length-1)
 		}
 	}
 	return &root
 }
 
-func deserializeHuffmanDictionary(br io.Reader) ([256]*hCode, error) {
-	hCodeMap := [256]*hCode{} // make an array to store all Huffman codes
+func deserializeHuffmanDictionary(br io.Reader) (*[256]hCode, error) {
+	hCodeMap := &[256]hCode{} // make an array to store all Huffman codes
 	temp := make([]byte, 1)   // make a 1 byte slice buffer to read into
 	var (
 		bitLength uint8
@@ -210,7 +212,7 @@ func deserializeHuffmanDictionary(br io.Reader) ([256]*hCode, error) {
 		if err != nil {
 			return hCodeMap, fmt.Errorf("error while reading bit stream for symbol from huffman code dictionary: %w", err)
 		}
-		hCodeMap[byteVal] = &hCode{bits: byteArray, length: int(bitLength)} // store the HCode in the array
+		hCodeMap[byteVal] = hCode{bits: byteArray, length: int(bitLength)} // store the HCode in the array
 	}
 	return hCodeMap, nil
 }
