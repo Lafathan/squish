@@ -23,16 +23,18 @@ func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize int, check
 	}
 	defer fw.Close()                               // defer the close to write EOS block
 	blockSize = min(blockSize, frame.MaxBlockSize) // validate blockSize first
+	buffer := make([]byte, blockSize)
 	for {
-		blockReader := io.LimitedReader{R: src, N: int64(blockSize)} // make a new LimitedReader
-		data, err := io.ReadAll(&blockReader)                        // read it all in from the src
-		if err != nil {
-			return fmt.Errorf("failed to read in from source: %w", err)
+		n, err := src.Read(buffer)
+		if n == 0 {
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return fmt.Errorf("failed to read from source: %w", err)
+			}
 		}
-		uncompressedLength := len(data)
-		if uncompressedLength == 0 {
-			break
-		}
+		data := buffer[:n]
 		checksum := uint64(0) // determine the checksum values
 		if checksumMode&frame.UncompressedChecksum > 0 {
 			checksum = uint64(crc32.ChecksumIEEE(data))
@@ -53,13 +55,16 @@ func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize int, check
 		}
 		block := frame.Block{ // build the block
 			BlockType: frame.DefaultCodec,
-			USize:     uint64(uncompressedLength),
+			USize:     uint64(n),
 			CSize:     uint64(len(data)),
 			Checksum:  checksum,
 		}
 		err = fw.WriteBlock(block, bytes.NewReader(data)) // write the block
 		if err != nil {
 			return fmt.Errorf("failed to write encoded block: %w", err)
+		}
+		if n < blockSize { // break if the last block was not full (partial final block)
+			break
 		}
 	}
 	return nil

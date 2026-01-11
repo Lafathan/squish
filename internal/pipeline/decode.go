@@ -22,12 +22,13 @@ func Decode(src io.Reader, dst io.Writer) error {
 		if block.BlockType == frame.EOS { // break if you reached the EOS
 			break
 		}
-		data, err := io.ReadAll(payload)
-		if len(data) != int(block.CSize) {
-			return fmt.Errorf("compressed payload does not match CSize: got %d - expected %d", len(data), block.CSize)
-		}
+		data := make([]byte, block.CSize)
+		n, err := io.ReadFull(payload, data)
 		if err != nil {
 			return fmt.Errorf("failed to read in payload: %w", err)
+		}
+		if n != int(block.CSize) {
+			return fmt.Errorf("compressed payload does not match CSize: got %d - expected %d", len(data), block.CSize)
 		}
 		blockCS := block.Checksum
 		if fr.Header.ChecksumMode&frame.CompressedChecksum > 0 {
