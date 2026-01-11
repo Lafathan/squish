@@ -247,10 +247,8 @@ func (HUFFMANCodec) DecodeBlock(src []byte) ([]byte, error) {
 	for {
 		if node.nodeType == branch {
 			newBit, err = inBuffer.ReadBits(1) // read in a bit
-			if errors.Is(err, io.EOF) {
+			if err != nil {
 				break
-			} else if err != nil {
-				return outBuffer.Bytes(), fmt.Errorf("error while reading bit from source in huffman decoding: %w", err)
 			}
 			if padBits > 0 {
 				node = node.children[(padBuffer>>(padBits-1))&0x01] // use the msb of the padded buffer as the decision bit
@@ -263,7 +261,11 @@ func (HUFFMANCodec) DecodeBlock(src []byte) ([]byte, error) {
 			node = t                        // reset to the root tree node
 		}
 	}
-	return outBuffer.Bytes(), nil
+	if errors.Is(err, io.EOF) {
+		return outBuffer.Bytes(), nil
+	} else {
+		return outBuffer.Bytes(), fmt.Errorf("error while reading bit from source in huffman decoding: %w", err)
+	}
 }
 
 func (HUFFMANCodec) IsLossless() bool {
