@@ -2,6 +2,8 @@ package bitio
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"math/rand"
 	"strings"
 	"testing"
@@ -51,11 +53,38 @@ func TestReadFullError(t *testing.T) {
 	}
 }
 
+func TestReadTooLarge(t *testing.T) {
+	// test trying to read >64 bits
+	reader := strings.NewReader("Hello World!")
+	bitReader := NewBitReader(reader)
+	_, err := bitReader.ReadBits(65)
+	if !errors.Is(err, io.ErrShortBuffer) {
+		t.Fatalf("Tried to read more bytes than bitReader buffer can hold")
+	}
+}
+
+func TestReadFull64BitMask(t *testing.T) {
+	// test reading in 64 bits
+	reader := strings.NewReader("Hello World!")
+	bitReader := NewBitReader(reader)
+	data, err := bitReader.ReadBits(64)
+	if err != nil {
+		t.Fatalf("Error when reading 64 bits: %v", err)
+	}
+	val := uint64(0)
+	for _, b := range []byte("Hello Wo") {
+		val = (val << 8) | uint64(b)
+	}
+	if val != data {
+		t.Fatalf("Mismatched result in 64BitMask test")
+	}
+}
+
 func TestFlush(t *testing.T) {
 	// test that the flush command pads the bits to the nearest byte size
 	buf := new(bytes.Buffer)
 	bw := NewBitWriter(buf)
-	err := bw.WriteBits(1, 6)
+	err := bw.WriteBits(0b00000001, 6)
 	if err != nil {
 		t.Fatalf("Failed to write bits before testing flush: %v", err)
 	}
