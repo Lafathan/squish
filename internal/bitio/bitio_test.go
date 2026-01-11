@@ -103,3 +103,73 @@ func TestFlush(t *testing.T) {
 		t.Fatalf("Padded unexpected amount during flush")
 	}
 }
+
+func TestWriteBitsFlushesFullBuffer(t *testing.T) {
+	buf := new(bytes.Buffer)
+	bw := NewBitWriter(buf)
+	err := bw.WriteBits(0x0102030405060708, 64)
+	if err != nil {
+		t.Fatalf("Failed to write initial 64 bits: %v", err)
+	}
+	err = bw.WriteBits(0xAA, 8)
+	if err != nil {
+		t.Fatalf("Failed to write trailing byte: %v", err)
+	}
+	_, err = bw.Flush()
+	if err != nil {
+		t.Fatalf("Failed to flush after full buffer write: %v", err)
+	}
+	expected := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0xAA}
+	if !bytes.Equal(buf.Bytes(), expected) {
+		t.Fatalf("Unexpected buffer contents: %v", buf.Bytes())
+	}
+}
+
+func TestClearBufferWrite(t *testing.T) {
+	buf := new(bytes.Buffer)
+	bw := NewBitWriter(buf)
+	bw.buffer = 0
+	bw.nBits = 63
+	bw.WriteBits(1, 64)
+	if (bw.buffer != 0x02) && (bw.nBits != 63) {
+		t.Fatalf("Failed to clear buffer")
+	}
+}
+
+func TestReadBitsShortRead(t *testing.T) {
+	reader := strings.NewReader("A")
+	bitReader := NewBitReader(reader)
+	_, err := bitReader.ReadBits(16)
+	if !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("Expected unexpected EOF, got %v", err)
+	}
+}
+
+func TestWriteBitsSpansBuffer(t *testing.T) {
+	buf := new(bytes.Buffer)
+	bw := NewBitWriter(buf)
+	err := bw.WriteBits(0xABC, 12)
+	if err != nil {
+		t.Fatalf("Failed to write initial 12 bits: %v", err)
+	}
+	err = bw.WriteBits(0x0123456789ABCDE, 60)
+	if err != nil {
+		t.Fatalf("Failed to write 60 bits: %v", err)
+	}
+	_, err = bw.Flush()
+	if err != nil {
+		t.Fatalf("Failed to flush: %v", err)
+	}
+	br := NewBitReader(bytes.NewReader(buf.Bytes()))
+	first, err := br.ReadBits(12)
+	if err != nil {
+		t.Fatalf("Failed to read first 12 bits: %v", err)
+	}
+	second, err := br.ReadBits(60)
+	if err != nil {
+		t.Fatalf("Failed to read next 60 bits: %v", err)
+	}
+	if first != 0xABC || second != 0x0123456789ABCDE {
+		t.Fatalf("Unexpected round trip values: %x %x", first, second)
+	}
+}
