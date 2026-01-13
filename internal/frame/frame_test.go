@@ -21,6 +21,7 @@ func TestWriteRead(t *testing.T) {
 		{BlockType: BlockCodec, Codec: []uint8{codec.RAW}, USize: 12, CSize: 12, Checksum: 75},
 		{BlockType: DefaultCodec, USize: 12, CSize: 12, Checksum: 170},
 		{BlockType: DefaultCodec, USize: 12, CSize: 12, Checksum: 345},
+		{BlockType: DefaultCodec, USize: 12, CSize: 12, Checksum: 345},
 	}
 	for i, h := range headers {
 		var str strings.Builder
@@ -37,7 +38,10 @@ func TestWriteRead(t *testing.T) {
 				t.Fatalf("Failed writing block %d: %v", i, err)
 			}
 		}
-		fw.Close()
+		err = fw.Close()
+		if err != nil {
+			t.Fatalf("Failed to close frame writer: %v", err)
+		}
 		fr := NewFrameReader(strings.NewReader(str.String()))
 		err = fr.Ready()
 		if err != nil {
@@ -73,7 +77,7 @@ func TestWriteRead(t *testing.T) {
 			t.Fatalf("Missed early read error: %v", err)
 		}
 		err = fr.Drop()
-		if fr.activePayload != nil {
+		if fr.activePayload != nil || err != nil {
 			t.Fatalf("Failed to drop active payload")
 		}
 		b, _, err := fr.Next()
@@ -108,5 +112,52 @@ func TestBlockValid(t *testing.T) {
 	err = badBlock.valid()
 	if err == nil {
 		t.Fatalf("Missed invalid maximum uncompressed size: %v", err)
+	}
+}
+
+func TestWriteBadPayloadSize(t *testing.T) {
+	h := Header{Key: MagicKey, Codec: []uint8{codec.RAW}}
+	b := Block{BlockType: DefaultCodec, USize: 12, CSize: 14}
+	var str strings.Builder
+	fw := NewFrameWriter(io.Writer(&str), h)
+	err := fw.Ready()
+	if err != nil {
+		t.Fatalf("Failed to ready FrameWriter: %v", err)
+	}
+	payload := strings.NewReader(payloadStr)
+	err = fw.WriteBlock(b, payload)
+	if err == nil {
+		t.Fatalf("Missed invalid CSize")
+	}
+}
+
+func TestWriteZeroPayload(t *testing.T) {
+	h := Header{Key: MagicKey, Codec: []uint8{codec.RAW}}
+	b := Block{BlockType: DefaultCodec, USize: 12, CSize: 0}
+	var str strings.Builder
+	fw := NewFrameWriter(io.Writer(&str), h)
+	err := fw.Ready()
+	if err != nil {
+		t.Fatalf("Failed to ready FrameWriter: %v", err)
+	}
+	payload := strings.NewReader(payloadStr)
+	err = fw.WriteBlock(b, payload)
+	if err != nil {
+		t.Fatalf("Failed to write empty payload: %v", err)
+	}
+}
+
+func TestWriteNilPayloadErr(t *testing.T) {
+	h := Header{Key: MagicKey, Codec: []uint8{codec.RAW}}
+	b := Block{BlockType: DefaultCodec, USize: 12, CSize: 12}
+	var str strings.Builder
+	fw := NewFrameWriter(io.Writer(&str), h)
+	err := fw.Ready()
+	if err != nil {
+		t.Fatalf("Failed to ready FrameWriter: %v", err)
+	}
+	err = fw.WriteBlock(b, nil)
+	if err == nil {
+		t.Fatalf("Missed nil payload with non-zero CSize")
 	}
 }

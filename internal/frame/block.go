@@ -50,32 +50,29 @@ func (b Block) String() string {
 }
 
 func readBlock(fr *frameReader) (Block, error) {
-	var b Block
-	var err error
-	// get block type
-	b.BlockType, err = fr.ReadByte()
+	var (
+		b   Block
+		err error
+	)
+	b.BlockType, err = fr.ReadByte() // get block type
 	if err != nil {
 		return b, fmt.Errorf("error in reading block type: %w", err)
 	}
-	// return if EOS block
-	if b.BlockType == EOS {
+	if b.BlockType == EOS { // return if EOS block
 		return b, nil
 	}
-	// read the number of codec if there is a block specific one
-	codecs := byte(0)
+	codecs := byte(0) // read the number of codecs if it is block specific
 	if b.BlockType == BlockCodec {
 		codecs, err = fr.ReadByte()
 		if err != nil {
 			return b, fmt.Errorf("error in reading block codecs: %w", err)
 		}
 	}
-	// read the order of the codecs
-	b.Codec, err = fr.ReadBytes(int(codecs))
+	b.Codec, err = fr.ReadBytes(int(codecs)) // read the order of the codecs
 	if err != nil {
 		return b, fmt.Errorf("error in reading block codec list: %w", err)
 	}
-	// read and assign the varint sizes
-	b.USize, err = binary.ReadUvarint(fr)
+	b.USize, err = binary.ReadUvarint(fr) // read and assign the varint sizes
 	if err != nil {
 		return b, fmt.Errorf("error in reading block uncompressed size: %w", err)
 	}
@@ -83,8 +80,7 @@ func readBlock(fr *frameReader) (Block, error) {
 	if err != nil {
 		return b, fmt.Errorf("error in reading block compressed size: %w", err)
 	}
-	// read the checksum data according to the method
-	byteLength := 0
+	byteLength := 0 // read the checksum data according to the method
 	if fr.Header.ChecksumMode&CompressedChecksum != 0x00 {
 		byteLength += crc32.Size
 	}
@@ -104,13 +100,11 @@ func readBlock(fr *frameReader) (Block, error) {
 }
 
 func writeBlock(fw *frameWriter, b Block) error {
-	// if EOS block is being written
-	if b.BlockType == EOS {
+	if b.BlockType == EOS { // if EOS block is being written
 		_, err := fw.writer.Write([]byte{b.BlockType})
 		return err
 	}
-	// build block header
-	bytes := make([]byte, 0, 27)
+	bytes := make([]byte, 0, 27) // build block header
 	bytes = append(bytes, b.BlockType)
 	if b.BlockType == BlockCodec {
 		bytes = append(bytes, byte(len(b.Codec)))
@@ -125,7 +119,6 @@ func writeBlock(fw *frameWriter, b Block) error {
 	} else if hasUCS || hasCCS {
 		bytes = binary.BigEndian.AppendUint32(bytes, uint32(b.Checksum))
 	}
-	// write the bytes
 	_, err := fw.writer.Write(bytes)
 	if err != nil {
 		return fmt.Errorf("error in writing block - %s: %w", b, err)

@@ -2,7 +2,6 @@ package frame
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 )
@@ -17,39 +16,33 @@ func NewFrameWriter(w io.Writer, h Header) *frameWriter {
 }
 
 func (fw *frameWriter) Ready() error {
-	// write the header bytes to the stream
-	return writeHeader(fw.writer, fw.header)
+	return writeHeader(fw.writer, fw.header) // write the header bytes to the stream
 }
 
 func (fw *frameWriter) Close() error {
-	// write an EOS block to the stream
-	return fw.WriteBlock(Block{BlockType: EOS, CSize: 0}, nil)
+	return fw.WriteBlock(Block{BlockType: EOS, CSize: 0}, nil) // write EOS block to stream
 }
 
 func (fw *frameWriter) WriteBlock(b Block, payload io.Reader) error {
 	if payload == nil {
 		if b.CSize > 0 {
-			return errors.New("nil payload but compressed size is non-zero")
+			return fmt.Errorf("nil payload but compressed size is non-zero")
 		}
 		payload = bytes.NewReader(nil)
 	}
-	// build block header
-	err := writeBlock(fw, b)
+	err := writeBlock(fw, b) // build block header
 	if err != nil {
 		return fmt.Errorf("frame error when writing header: %w", err)
 	}
-	// check for zero length
-	if b.CSize == 0 {
+	if b.CSize == 0 { // check for zero length
 		return nil
 	}
-	// copy the payload to the writer
-	n, err := io.CopyN(fw.writer, payload, int64(b.CSize))
+	n, err := io.CopyN(fw.writer, payload, int64(b.CSize)) // copy the payload to the writer
 	if err != nil {
 		return fmt.Errorf("error when copying payload to frame writer: %w", err)
 	}
-	// check to see if the payload is the correct size
-	if n != int64(b.CSize) {
-		return errors.New("payload size does not match compressed size value")
+	if n != int64(b.CSize) { // check to see if the payload is the correct size
+		return fmt.Errorf("payload size does not match compressed size value")
 	}
 	return err
 }
