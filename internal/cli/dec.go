@@ -15,6 +15,21 @@ func runDec(args []string) int {
 		outPath2 = flagSet.String("output", "", "output file path (or '-' for stdout)")
 	)
 
+	flagSet.Usage = func() {
+		fmt.Fprintf(os.Stdout, "squish dec - deccompress a .sqz stream into original bytes\n")
+		fmt.Fprintf(os.Stdout, "\n")
+		fmt.Fprintf(os.Stdout, "USAGE:\n")
+		fmt.Fprintf(os.Stdout, "  squish dec [flags] [input]\n")
+		fmt.Fprintf(os.Stdout, "\n")
+		fmt.Fprintf(os.Stdout, "FLAGS:\n")
+		flagSet.PrintDefaults()
+		fmt.Fprintf(os.Stdout, "\n")
+		fmt.Fprintf(os.Stdout, "EXAMPLES:\n")
+		fmt.Fprintf(os.Stdout, "  squish dec ./file.sqz -o ./file\n")
+		fmt.Fprintf(os.Stdout, "  squish dec ./file.sqz -o -\n")
+		fmt.Fprintf(os.Stdout, "  squish enc ./data.bin -codec RAW -o - > data.sqz\n")
+	}
+
 	if err := flagSet.Parse(args); err != nil {
 		if err == flag.ErrHelp {
 			return 0
@@ -77,22 +92,4 @@ func runDec(args []string) int {
 		fmt.Fprintf(os.Stderr, "dec: decode failed %v", err)
 	}
 	return 0
-}
-
-func printDecHelp(fs *flag.FlagSet) {
-	fmt.Fprintln(os.Stdout, `
-squish dec - decompress a .sqz stream into original bytes
-
-USAGE:
-  squish dec [flags] [input]
-
-FLAGS:`)
-	fs.PrintDefaults()
-	fmt.Fprintln(os.Stdout, `
-  -o, --output <path|->    Output file (default: '-')
-
-EXAMPLES:
-  squish dec ./file.sqz -o ./file
-  squish dec ./file.sqz -o -
-  cat file.sqz | squish dec > file\n`)
 }

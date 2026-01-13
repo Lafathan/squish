@@ -41,13 +41,16 @@ INPUT/OUTPUT:
 	use '-' to explicitly mean stdin/stdout
 
 FLAGS:
-	-o, --output <path|->    Output file (defaults to '-')
-	-v, --version            Display current version of squish
-	-h, --help               Show help and exit 
+  -o, -output <path|->
+        output file (defaults to '-')
+  -v, -version
+        display current version of squish
+  -h, -help
+        show help and exit 
 
 Examples:
-	squish enc --codec RLE|HUFFMAN -o ./output.sqz ./input.txt 
-	squish enc --codec RLE --blocksize 256KiB -o ./out.sqz -
+	squish enc -codec RLE-HUFFMAN -o ./output.sqz ./input.txt 
+	squish enc -codec RLE --blocksize 256KiB -o ./out.sqz -
 	squish dec -o ./input.txt ./output.sqz 
 	squish dec -o - ./compressed.sqz 
 	squish analyze ./output.sqz

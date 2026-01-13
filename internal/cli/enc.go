@@ -17,6 +17,7 @@ import (
 func runEnc(args []string) int {
 	flagSet := flag.NewFlagSet("enc", flag.ContinueOnError)
 	flagSet.SetOutput(os.Stdout)
+
 	var (
 		outPath    = flagSet.String("o", "-", "output file path (or '-' for stdout)")
 		outPath2   = flagSet.String("output", "", "output file path (or '-' for stdout)")
@@ -25,6 +26,28 @@ func runEnc(args []string) int {
 		checksum   = flagSet.String("checksum", "", "checksum mode: u|c|uc")
 		listCodecs = flagSet.Bool("list-codecs", false, "list supported codecs and exit")
 	)
+
+	flagSet.Usage = func() {
+		fmt.Fprintf(os.Stdout, "squish enc - compress input into a .sqz stream\n")
+		fmt.Fprintf(os.Stdout, "\n")
+		fmt.Fprintf(os.Stdout, "USAGE:\n")
+		fmt.Fprintf(os.Stdout, "  squish enc -codec <pipeline> [flags] [input]\n")
+		fmt.Fprintf(os.Stdout, "\n")
+		fmt.Fprintf(os.Stdout, "REQUIRED\n")
+		fmt.Fprintf(os.Stdout, "  -codec <pipeline>        Codec pipeline, e.g. RLE-HUFFMAN\n")
+		fmt.Fprintf(os.Stdout, "\n")
+		fmt.Fprintf(os.Stdout, "FLAGS:\n")
+		flagSet.PrintDefaults()
+		fmt.Fprintf(os.Stdout, "\n")
+		fmt.Fprintf(os.Stdout, "PIPELINE SYNTAX:\n")
+		fmt.Fprintf(os.Stdout, "  -codec CODEC1-CODEC2-... applies codecs in order.\n")
+		fmt.Fprintf(os.Stdout, "  Codec names are case-insensitive.\n")
+		fmt.Fprintf(os.Stdout, "\n")
+		fmt.Fprintf(os.Stdout, "EXAMPLES:\n")
+		fmt.Fprintf(os.Stdout, "  squish enc ./input.txt -codec RLE-HUFFMAN -o ./output.sqz\n")
+		fmt.Fprintf(os.Stdout, "  squish enc - -codec RLE -blocksize 128KiB -o ./out.sqz\n")
+		fmt.Fprintf(os.Stdout, "  squish enc ./data.bin -codec RAW -o - > data.sqz\n")
+	}
 
 	if err := flagSet.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -43,19 +66,18 @@ func runEnc(args []string) int {
 
 	// parse codec pipeline
 	if *codecPipe == "" {
-		fmt.Fprintf(os.Stdout, "enc: missing required -codec")
-		printEncHelp(flagSet)
+		fmt.Fprintf(os.Stdout, "enc: missing required -codec\n")
 		return 2
 	}
 	codecStrings := strings.Split(*codecPipe, "-")
 	codecList := make([]uint8, 0, len(codecStrings))
 	for _, cString := range codecStrings {
 		if cString == "" {
-			fmt.Fprintf(os.Stderr, "enc: empty codec in pipeline")
+			fmt.Fprintf(os.Stderr, "enc: empty codec in pipeline\n")
 		}
 		codecID, ok := codec.StringToCodecIDMap[strings.ToUpper(cString)]
 		if !ok {
-			fmt.Fprintf(os.Stderr, "enc: unknown codec %q (try: squish enc --list-codecs)", cString)
+			fmt.Fprintf(os.Stderr, "enc: unknown codec %q (try: squish enc --list-codecs)\n", cString)
 		}
 		codecList = append(codecList, codecID)
 	}
@@ -154,27 +176,4 @@ func runEnc(args []string) int {
 		fmt.Fprintf(os.Stderr, "enc: encode failed: %v", err)
 	}
 	return 0
-}
-
-func printEncHelp(fs *flag.FlagSet) {
-	fmt.Fprintln(os.Stdout, `
-squish enc - compress input into a .sqz stream
-
-USAGE:
-	squish enc -codec <pipeline> [flags] [input]
-
-REQUIRED:
-  -codec <pipeline>        Codec pipeline, e.g. RLE|HUFFMAN|RLE
-
-FLAGS:`)
-	fs.PrintDefaults()
-	fmt.Fprintln(os.Stdout, `
-PIPELINE SYNTAX:
-  -codec CODEC1|CODEC2|... applies codecs in order.
-  Codec names are case-insensitive.
-
-EXAMPLES:
-  squish enc ./input.txt --codec RLE|HUFFMAN -o ./output.sqz
-  squish enc - -codec RLE --blocksize 128KiB -o ./out.sqz
-  squish enc ./data.bin --codec RAW -o - > data.sqz`)
 }
