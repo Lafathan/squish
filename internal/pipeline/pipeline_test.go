@@ -44,3 +44,13 @@ func TestPipelineMultipleCodecs(t *testing.T) {
 	message := "Hello World!"
 	testHelper(t, message, []uint8{codec.RLE, codec.HUFFMAN}, frame.MaxBlockSize, frame.NoChecksum)
 }
+
+func TestEmptySrc(t *testing.T) {
+	message := ""
+	testHelper(t, message, []uint8{codec.RLE, codec.HUFFMAN}, frame.MaxBlockSize, frame.NoChecksum)
+}
+
+func TestPartialLastBlock(t *testing.T) {
+	message := "Hello World!"
+	testHelper(t, message, []uint8{codec.HUFFMAN}, 10, frame.NoChecksum)
+}
