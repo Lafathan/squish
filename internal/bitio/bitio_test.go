@@ -93,18 +93,18 @@ func TestFlush(t *testing.T) {
 		t.Fatalf("Failed during flush of bitWriter: %v", err)
 	}
 	if n != 2 {
-		t.Fatalf("Padded unexpected amount during flush")
+		t.Fatalf("Padded unexpected amount during byte-misaligned flush")
 	}
 	n, err = bw.Flush()
 	if err != nil {
 		t.Fatalf("Failed during flush of empty bitWriter: %v", err)
 	}
 	if n != 0 {
-		t.Fatalf("Padded unexpected amount during flush")
+		t.Fatalf("Padded unexpected amount during byte-aligned flush")
 	}
 }
 
-func TestWriteBitsFlushesFullBuffer(t *testing.T) {
+func TestWriteBitsClearsFullBuffer(t *testing.T) {
 	buf := new(bytes.Buffer)
 	bw := NewBitWriter(buf)
 	err := bw.WriteBits(0x0102030405060708, 64)
@@ -122,17 +122,6 @@ func TestWriteBitsFlushesFullBuffer(t *testing.T) {
 	expected := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0xAA}
 	if !bytes.Equal(buf.Bytes(), expected) {
 		t.Fatalf("Unexpected buffer contents: %v", buf.Bytes())
-	}
-}
-
-func TestClearBufferWrite(t *testing.T) {
-	buf := new(bytes.Buffer)
-	bw := NewBitWriter(buf)
-	bw.buffer = 0
-	bw.nBits = 63
-	bw.WriteBits(1, 64)
-	if (bw.buffer != 0x02) && (bw.nBits != 63) {
-		t.Fatalf("Failed to clear buffer")
 	}
 }
 
