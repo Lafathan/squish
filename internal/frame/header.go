@@ -1,7 +1,6 @@
 package frame
 
 import (
-	"errors"
 	"fmt"
 	"io"
 )
@@ -14,12 +13,11 @@ type Header struct {
 }
 
 func (h *Header) valid() error {
-	// make sure the header starts with the valid start key
-	if h.Key != MagicKey {
-		return errors.New("invalid header start key")
+	if h.Key != MagicKey { // make sure the header starts with the valid start key
+		return fmt.Errorf("invalid header start key")
 	}
 	if h.ChecksumMode > UncompressedChecksum+CompressedChecksum {
-		return errors.New("invalid checksum method found")
+		return fmt.Errorf("invalid checksum method found")
 	}
 	return nil
 }
@@ -48,14 +46,12 @@ func (header1 Header) equal(header2 Header) bool {
 
 func readHeader(r io.Reader) (Header, error) {
 	var h Header
-	// read in the header of the frame
-	bytes := make([]byte, 7)
+	bytes := make([]byte, 7) // read in the header of the frame
 	_, err := io.ReadFull(r, bytes)
 	if err != nil {
 		return h, fmt.Errorf("error in reading header: %w", err)
 	}
-	// assign values to the header of the FrameReader
-	h.Key = string(bytes[:4])
+	h.Key = string(bytes[:4]) // assign values to the header of the FrameReader
 	h.Flags = bytes[4]
 	h.ChecksumMode = bytes[5]
 	codecs := bytes[6]
@@ -68,14 +64,12 @@ func readHeader(r io.Reader) (Header, error) {
 }
 
 func writeHeader(w io.Writer, h Header) error {
-	// build byte array for header
-	bytes := []byte(h.Key)
+	bytes := []byte(h.Key) // build byte array for header
 	bytes = append(bytes, h.Flags)
 	bytes = append(bytes, h.ChecksumMode)
 	bytes = append(bytes, byte(len(h.Codec)))
 	bytes = append(bytes, h.Codec...)
-	// write the header so the FrameWriter is ready to start writing blocks
-	_, err := w.Write(bytes)
+	_, err := w.Write(bytes) // write the header so FrameWriter is ready to write blocks
 	if err != nil {
 		return fmt.Errorf("error in writing header - %s: %w", h, err)
 	}

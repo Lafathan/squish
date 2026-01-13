@@ -2,7 +2,6 @@ package frame
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"hash/crc32"
 )
@@ -17,10 +16,10 @@ type Block struct {
 
 func (b *Block) valid() error {
 	if (b.BlockType != EOS) && (b.BlockType != DefaultCodec) && (b.BlockType != BlockCodec) {
-		return errors.New("invalid block type found")
+		return fmt.Errorf("invalid block type found")
 	}
 	if b.USize > MaxBlockSize {
-		return errors.New("invalid block size found")
+		return fmt.Errorf("invalid block size found")
 	}
 	return nil
 }

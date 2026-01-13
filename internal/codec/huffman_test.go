@@ -1,7 +1,7 @@
 package codec
 
 import (
-	"strings"
+	"bytes"
 	"testing"
 )
 
@@ -25,14 +25,14 @@ func TestHuffmanEncodeDecode(t *testing.T) {
 	HuffmanEncodeDecode(message, t)
 }
 
-func TestHuffmanMaxRunLength(t *testing.T) {
-	message := "abccdddeeeeeffffffff" +
-		strings.Repeat("g", 13) +
-		strings.Repeat("h", 21) +
-		strings.Repeat("i", 34) +
-		strings.Repeat("j", 55) +
-		strings.Repeat("k", 89)
-	HuffmanEncodeDecode(message, t)
+func TestHuffmanRunLength(t *testing.T) {
+	message := []byte{0, 1}
+	a, b := 1, 1
+	for i := range 30 {
+		a, b = b, a+b
+		message = append(message, bytes.Repeat([]byte{byte(i)}, b)...)
+	}
+	HuffmanEncodeDecode(string(message), t)
 }
 
 func TestHuffmanEmptyMessage(t *testing.T) {

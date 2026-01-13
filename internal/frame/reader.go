@@ -1,7 +1,6 @@
 package frame
 
 import (
-	"errors"
 	"fmt"
 	"io"
 )
@@ -27,7 +26,7 @@ func (fr *frameReader) Ready() error {
 
 func (fr *frameReader) Next() (Block, io.Reader, error) {
 	if fr.activePayload != nil && fr.activePayload.N > 0 { // double check for an active payload
-		return Block{}, nil, errors.New("early read, previous payload still active")
+		return Block{}, nil, fmt.Errorf("early read, previous payload still active")
 	}
 	block, err := readBlock(fr) // read in the block header
 	if err != nil {

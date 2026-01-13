@@ -40,6 +40,14 @@ func TestRLEEmptyMessage(t *testing.T) {
 	RLEEncodeDecode(message, t)
 }
 
+func TestInvalidMessageLength(t *testing.T) {
+	rle := RLECodec{}
+	_, err := rle.DecodeBlock([]byte{1, 1, 2, 2, 3})
+	if err == nil {
+		t.Fatalf("Missed invalid RLE length")
+	}
+}
+
 func TestRLELossless(t *testing.T) {
 	rle := RLECodec{}
 	if !rle.IsLossless() {
