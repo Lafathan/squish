@@ -161,13 +161,18 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, error) {
 }
 
 func getHuffmanTreeFromDict(d *[256]hCode) *node {
-	root := node{nodeType: branch}                                 // make an empty root node
-	var buildTree func(n *node, val byte, bits []byte, bitPos int) // define for recursion
+	root := node{nodeType: branch} // make an empty root node
+	var (
+		buildTree func(n *node, val byte, bits []byte, bitPos int) // define recursive elements
+		byteIndex int
+		shift     int
+		bit       byte
+	)
 	buildTree = func(n *node, val byte, bits []byte, bitPos int) {
 		if bitPos >= 0 {
-			byteIndex := len(bits) - 1 - bitPos/8 // get the byte index of that bit
-			shift := bitPos % 8                   // shift required to move the decision bit to lsb
-			bit := (bits[byteIndex] >> shift) & 1 // isolate the decision bit
+			byteIndex = len(bits) - 1 - bitPos/8 // get the byte index of that bit
+			shift = bitPos % 8                   // shift required to move the decision bit to lsb
+			bit = (bits[byteIndex] >> shift) & 1 // isolate the decision bit
 			if n.children[bit] == nil {
 				n.children[bit] = &node{nodeType: branch} // create the child node if it doesn't exist
 			}
