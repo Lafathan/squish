@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"os"
 	"squish/internal/pipeline"
+	"squish/internal/sqerr"
 )
 
-func runDec(args []string) int {
+func runDec(args []string) sqerr.Code {
 	flagSet := flag.NewFlagSet("dec", flag.ContinueOnError)
 	flagSet.SetOutput(os.Stdout)
 	var (
@@ -32,9 +33,9 @@ func runDec(args []string) int {
 
 	if err := flagSet.Parse(args); err != nil {
 		if err == flag.ErrHelp {
-			return 0
+			return sqerr.Success
 		}
-		return 2
+		return sqerr.Usage
 	}
 
 	// parse output file
@@ -50,7 +51,7 @@ func runDec(args []string) int {
 		f, err := os.Create(output)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "dec: failed to write file %q\n\n:%v", output, err)
-			return 0
+			return sqerr.IO
 		}
 		outFile = f
 		closeFile = true
@@ -67,6 +68,7 @@ func runDec(args []string) int {
 	}
 	if len(remainingArgs) > 1 {
 		fmt.Fprintf(os.Stderr, "dec: too many positional arguments (expected at most 1)")
+		return sqerr.IO
 	}
 
 	// open the input file
@@ -78,7 +80,7 @@ func runDec(args []string) int {
 		f, err := os.Open(input)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "dec: failed to open input file %q\n\n", input)
-			return 1
+			return sqerr.IO
 		}
 		inFile = f
 		closeFile = true
@@ -90,6 +92,7 @@ func runDec(args []string) int {
 	// call the business
 	if err := pipeline.Decode(inFile, outFile); err != nil {
 		fmt.Fprintf(os.Stderr, "dec: decode failed %v", err)
+		return sqerr.ErrorCode(err)
 	}
-	return 0
+	return sqerr.Success
 }

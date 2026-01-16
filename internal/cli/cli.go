@@ -3,12 +3,13 @@ package cli
 import (
 	"fmt"
 	"os"
+	"squish/internal/sqerr"
 )
 
-func Run(args []string) int {
+func Run(args []string) sqerr.Code {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
 		printMainHelp()
-		return 0
+		return sqerr.Success
 	}
 	switch args[0] {
 	case "enc":
@@ -18,7 +19,7 @@ func Run(args []string) int {
 	default:
 		fmt.Printf("unknown command: %q\n\n", args[0])
 		printMainHelp()
-		return 2
+		return sqerr.Usage
 	}
 }
 

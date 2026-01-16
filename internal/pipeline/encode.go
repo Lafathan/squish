@@ -7,6 +7,7 @@ import (
 	"io"
 	"squish/internal/codec"
 	"squish/internal/frame"
+	"squish/internal/sqerr"
 )
 
 func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize int, checksumMode uint8) error {
@@ -19,7 +20,7 @@ func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize int, check
 	fw := frame.NewFrameWriter(dst, header) // make a framewriter
 	err := fw.Ready()                       // write the header
 	if err != nil {
-		return fmt.Errorf("failed to ready frame writer: %w", err)
+		return sqerr.CodedError(err, sqerr.IO, "failed to ready frame writer")
 	}
 	defer fw.Close()                               // defer the close to write EOS block
 	blockSize = min(blockSize, frame.MaxBlockSize) // validate blockSize first
@@ -31,7 +32,7 @@ func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize int, check
 				break
 			}
 			if err != nil {
-				return fmt.Errorf("failed to read from source: %w", err)
+				return sqerr.CodedError(err, sqerr.IO, "failed to read from source")
 			}
 		}
 		data := buffer[:n]
@@ -42,11 +43,11 @@ func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize int, check
 		for _, codecID := range codecIDs {
 			currentCodec, ok := codec.CodecMap[codecID]
 			if !ok {
-				return fmt.Errorf("invalid codec ID")
+				return sqerr.New(sqerr.Unsupported, "unsupported codec ID")
 			}
 			data, err = currentCodec.EncodeBlock(data) // encode it
 			if err != nil {
-				return fmt.Errorf("failed to encode block of data with codec %d: %w", codecID, err)
+				return sqerr.CodedError(err, sqerr.Internal, fmt.Sprintf("failed to encode block of data with codec %d", codecID))
 			}
 		}
 		if checksumMode&frame.CompressedChecksum > 0 {
@@ -61,7 +62,7 @@ func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize int, check
 		}
 		err = fw.WriteBlock(block, bytes.NewReader(data)) // write the block
 		if err != nil {
-			return fmt.Errorf("failed to write encoded block: %w", err)
+			return sqerr.CodedError(err, sqerr.IO, "failed to write encoded block")
 		}
 		if n < blockSize { // break if the last block was not full (partial final block)
 			break

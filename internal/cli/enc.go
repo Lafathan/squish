@@ -10,11 +10,12 @@ import (
 	"squish/internal/codec"
 	"squish/internal/frame"
 	"squish/internal/pipeline"
+	"squish/internal/sqerr"
 	"strconv"
 	"strings"
 )
 
-func runEnc(args []string) int {
+func runEnc(args []string) sqerr.Code {
 	flagSet := flag.NewFlagSet("enc", flag.ContinueOnError)
 	flagSet.SetOutput(os.Stdout)
 
@@ -51,9 +52,9 @@ func runEnc(args []string) int {
 
 	if err := flagSet.Parse(args); err != nil {
 		if err == flag.ErrHelp {
-			return 0
+			return sqerr.Success
 		}
-		return 2
+		return sqerr.Usage
 	}
 
 	// parse and display "listCodec"
@@ -61,23 +62,25 @@ func runEnc(args []string) int {
 		codecNames := slices.Collect(maps.Keys(codec.StringToCodecIDMap))
 		sort.Strings(codecNames)
 		fmt.Fprintf(os.Stdout, "%s", strings.Join(codecNames, ", "))
-		return 0
+		return sqerr.Success
 	}
 
 	// parse codec pipeline
 	if *codecPipe == "" {
 		fmt.Fprintf(os.Stdout, "enc: missing required -codec\n")
-		return 2
+		return sqerr.Usage
 	}
 	codecStrings := strings.Split(*codecPipe, "-")
 	codecList := make([]uint8, 0, len(codecStrings))
 	for _, cString := range codecStrings {
 		if cString == "" {
 			fmt.Fprintf(os.Stderr, "enc: empty codec in pipeline\n")
+			return sqerr.Usage
 		}
 		codecID, ok := codec.StringToCodecIDMap[strings.ToUpper(cString)]
 		if !ok {
 			fmt.Fprintf(os.Stderr, "enc: unknown codec %q (try: squish enc --list-codecs)\n", cString)
+			return sqerr.Unsupported
 		}
 		codecList = append(codecList, codecID)
 	}
@@ -95,7 +98,7 @@ func runEnc(args []string) int {
 		f, err := os.Create(output)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "enc: failed to write file %q\n\n:%v", output, err)
-			return 0
+			return sqerr.Success
 		}
 		outFile = f
 		closeFile = true
@@ -117,6 +120,7 @@ func runEnc(args []string) int {
 		checksumFlag = frame.UncompressedChecksum | frame.CompressedChecksum
 	default:
 		fmt.Fprintf(os.Stderr, "enc: unknown checksum value %q\n\n", *checksum)
+		return sqerr.Usage
 	}
 
 	// parse the blocksize flags
@@ -132,7 +136,7 @@ func runEnc(args []string) int {
 			val, err := strconv.Atoi(prefix)
 			if err != nil || val <= 0 {
 				fmt.Printf("enc: invalid blocksize %q (expected e.g. 256KiB, 1MiB)\n\n", bs)
-				return 2
+				return sqerr.Usage
 			}
 			blockByteSize = val * mags[i]
 			matched = true
@@ -141,6 +145,7 @@ func runEnc(args []string) int {
 	}
 	if !matched {
 		fmt.Printf("enc: invalid blocksize %q (expected e.g. 256KiB, 1MiB)\n\n", bs)
+		return sqerr.Usage
 	}
 
 	// get positional arguments
@@ -151,6 +156,7 @@ func runEnc(args []string) int {
 	}
 	if len(remainingArgs) > 1 {
 		fmt.Fprintf(os.Stderr, "enc: too many positional arguments (expected at most 1)")
+		return sqerr.Usage
 	}
 
 	// open the input file
@@ -162,7 +168,7 @@ func runEnc(args []string) int {
 		f, err := os.Open(input)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "enc: failed to open input file %q\n\n", input)
-			return 1
+			return sqerr.IO
 		}
 		inFile = f
 		closeFile = true
@@ -174,6 +180,7 @@ func runEnc(args []string) int {
 	// call the business
 	if err := pipeline.Encode(inFile, outFile, codecList, blockByteSize, checksumFlag); err != nil {
 		fmt.Fprintf(os.Stderr, "enc: encode failed: %v", err)
+		return sqerr.ErrorCode(err)
 	}
-	return 0
+	return sqerr.Success
 }
