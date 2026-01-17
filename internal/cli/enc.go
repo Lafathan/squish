@@ -61,7 +61,7 @@ func runEnc(args []string) sqerr.Code {
 	if *listCodecs {
 		codecNames := slices.Collect(maps.Keys(codec.StringToCodecIDMap))
 		sort.Strings(codecNames)
-		fmt.Fprintf(os.Stdout, "%s", strings.Join(codecNames, ", "))
+		fmt.Fprintf(os.Stdout, "%s\n", strings.Join(codecNames, ", "))
 		return sqerr.Success
 	}
 
@@ -97,7 +97,7 @@ func runEnc(args []string) sqerr.Code {
 	} else {
 		f, err := os.Create(output)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "enc: failed to write file %q\n\n:%v", output, err)
+			fmt.Fprintf(os.Stderr, "enc: failed to write file %q: %v", output, err)
 			return sqerr.Success
 		}
 		outFile = f
@@ -119,7 +119,7 @@ func runEnc(args []string) sqerr.Code {
 	case "uc":
 		checksumFlag = frame.UncompressedChecksum | frame.CompressedChecksum
 	default:
-		fmt.Fprintf(os.Stderr, "enc: unknown checksum value %q\n\n", *checksum)
+		fmt.Fprintf(os.Stderr, "enc: unknown checksum value %q\n", *checksum)
 		return sqerr.Usage
 	}
 
@@ -135,7 +135,7 @@ func runEnc(args []string) sqerr.Code {
 		if found {
 			val, err := strconv.Atoi(prefix)
 			if err != nil || val <= 0 {
-				fmt.Printf("enc: invalid blocksize %q (expected e.g. 256KiB, 1MiB)\n\n", bs)
+				fmt.Printf("enc: invalid blocksize %q (expected e.g. 256KiB, 1MiB)\n", bs)
 				return sqerr.Usage
 			}
 			blockByteSize = val * mags[i]
@@ -144,7 +144,7 @@ func runEnc(args []string) sqerr.Code {
 		}
 	}
 	if !matched {
-		fmt.Printf("enc: invalid blocksize %q (expected e.g. 256KiB, 1MiB)\n\n", bs)
+		fmt.Printf("enc: invalid blocksize %q (expected e.g. 256KiB, 1MiB)\n", bs)
 		return sqerr.Usage
 	}
 
@@ -155,7 +155,7 @@ func runEnc(args []string) sqerr.Code {
 		input = remainingArgs[0]
 	}
 	if len(remainingArgs) > 1 {
-		fmt.Fprintf(os.Stderr, "enc: too many positional arguments (expected at most 1)")
+		fmt.Fprintf(os.Stderr, "enc: too many positional arguments (expected at most 1)\n")
 		return sqerr.Usage
 	}
 
@@ -167,7 +167,7 @@ func runEnc(args []string) sqerr.Code {
 	} else {
 		f, err := os.Open(input)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "enc: failed to open input file %q\n\n", input)
+			fmt.Fprintf(os.Stderr, "enc: failed to open input file %q\n", input)
 			return sqerr.IO
 		}
 		inFile = f

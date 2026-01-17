@@ -4,6 +4,9 @@ package codec
 const (
 	RAW = iota
 	RLE
+	RLE2
+	RLE3
+	RLE4
 	HUFFMAN
 	LZ77
 	DCT
@@ -12,7 +15,10 @@ const (
 // codec key map
 var CodecMap = map[uint8]Codec{
 	RAW:     RAWCodec{},
-	RLE:     RLECodec{},
+	RLE:     RLENCodec{byteLength: 1},
+	RLE2:    RLENCodec{byteLength: 2},
+	RLE3:    RLENCodec{byteLength: 3},
+	RLE4:    RLENCodec{byteLength: 4},
 	HUFFMAN: HUFFMANCodec{},
 }
 
@@ -20,6 +26,9 @@ var CodecMap = map[uint8]Codec{
 var StringToCodecIDMap = map[string]uint8{
 	"RAW":     RAW,
 	"RLE":     RLE,
+	"RLE2":    RLE2,
+	"RLE3":    RLE3,
+	"RLE4":    RLE4,
 	"HUFFMAN": HUFFMAN,
 }
 
