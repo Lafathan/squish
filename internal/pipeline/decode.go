@@ -29,7 +29,7 @@ func Decode(src io.Reader, dst io.Writer) error {
 			return sqerr.CodedError(err, sqerr.ReadErrorCode(err), "failed to read input block")
 		}
 		if n != int(block.CSize) {
-			return sqerr.CodedError(err, sqerr.Corrupt, fmt.Sprintf("compressed payload does not match CSize: got %d - expected %d", len(data), block.CSize))
+			return sqerr.CodedError(err, sqerr.Corrupt, fmt.Sprintf("mismatched compressed payload size: got %d - expected %d", len(data), block.CSize))
 		}
 		blockCS := block.Checksum
 		if fr.Header.ChecksumMode&frame.CompressedChecksum > 0 {
@@ -67,10 +67,10 @@ func Decode(src io.Reader, dst io.Writer) error {
 		}
 		out, err := dst.Write(data)              // write it out
 		if out != int(block.USize) && lossless { // verify the uncompressed payload size
-			return sqerr.New(sqerr.Corrupt, fmt.Sprintf("uncompressed payload does not match USize: got %d - expected %d", out, block.USize))
+			return sqerr.New(sqerr.Corrupt, fmt.Sprintf("mismatched uncompressed payload size: got %d - expected %d", out, block.USize))
 		}
 		if err != nil {
-			return sqerr.CodedError(err, sqerr.IO, "error when writing output")
+			return sqerr.CodedError(err, sqerr.IO, "failed to write output")
 		}
 	}
 	return nil

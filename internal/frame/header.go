@@ -3,6 +3,7 @@ package frame
 import (
 	"fmt"
 	"io"
+	"squish/internal/sqerr"
 )
 
 type Header struct {
@@ -14,10 +15,10 @@ type Header struct {
 
 func (h *Header) valid() error {
 	if h.Key != MagicKey { // make sure the header starts with the valid start key
-		return fmt.Errorf("invalid header start key")
+		return sqerr.New(sqerr.Corrupt, "invalid header start key found")
 	}
 	if h.ChecksumMode > UncompressedChecksum+CompressedChecksum {
-		return fmt.Errorf("invalid checksum method found")
+		return sqerr.New(sqerr.Corrupt, "invalid checksum method found")
 	}
 	return nil
 }
@@ -49,7 +50,7 @@ func readHeader(r io.Reader) (Header, error) {
 	bytes := make([]byte, 7) // read in the header of the frame
 	_, err := io.ReadFull(r, bytes)
 	if err != nil {
-		return h, fmt.Errorf("error in reading header: %w", err)
+		return h, fmt.Errorf("failed to read header: %w", err)
 	}
 	h.Key = string(bytes[:4]) // assign values to the header of the FrameReader
 	h.Flags = bytes[4]
@@ -58,7 +59,7 @@ func readHeader(r io.Reader) (Header, error) {
 	h.Codec = make([]byte, codecs)
 	_, err = io.ReadFull(r, h.Codec)
 	if err != nil {
-		return h, fmt.Errorf("error in reading codecs from header: %w", err)
+		return h, fmt.Errorf("failed to read header codecs: %w", err)
 	}
 	return h, nil
 }
@@ -71,7 +72,7 @@ func writeHeader(w io.Writer, h Header) error {
 	bytes = append(bytes, h.Codec...)
 	_, err := w.Write(bytes) // write the header so FrameWriter is ready to write blocks
 	if err != nil {
-		return fmt.Errorf("error in writing header - %s: %w", h, err)
+		return fmt.Errorf("failed to write header: %w", err)
 	}
 	return nil
 }

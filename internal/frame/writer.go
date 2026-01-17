@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"squish/internal/sqerr"
 )
 
 type frameWriter struct {
@@ -26,23 +27,23 @@ func (fw *frameWriter) Close() error {
 func (fw *frameWriter) WriteBlock(b Block, payload io.Reader) error {
 	if payload == nil {
 		if b.CSize > 0 {
-			return fmt.Errorf("nil payload but compressed size is non-zero")
+			return sqerr.New(sqerr.Corrupt, "nil payload but compressed size is non-zero")
 		}
 		payload = bytes.NewReader(nil)
 	}
 	err := writeBlock(fw, b) // build block header
 	if err != nil {
-		return fmt.Errorf("frame error when writing header: %w", err)
+		return fmt.Errorf("failed to write header: %w", err)
 	}
 	if b.CSize == 0 { // check for zero length
 		return nil
 	}
 	n, err := io.CopyN(fw.writer, payload, int64(b.CSize)) // copy the payload to the writer
 	if err != nil {
-		return fmt.Errorf("error when copying payload to frame writer: %w", err)
+		return fmt.Errorf("failed when copying payload to frame writer: %w", err)
 	}
 	if n != int64(b.CSize) { // check to see if the payload is the correct size
-		return fmt.Errorf("payload size does not match compressed size value")
+		return sqerr.New(sqerr.Corrupt, fmt.Sprintf("mismatched payload size: got %d - expected %d", n, b.CSize))
 	}
 	return err
 }
