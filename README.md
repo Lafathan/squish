@@ -58,16 +58,3 @@ The binary will be created at `./squish`.
 ### `dec`
 
 - `-o, --output`: output path (`-` for stdout)
-
-## Profiling
-
-Set these environment variables to enable profiling output when running the CLI:
-
-- `SQUISH_CPUPROFILE`: path for a CPU profile
-- `SQUISH_MEMPROFILE`: path for a heap profile
-
-Example:
-
-```sh
-SQUISH_CPUPROFILE=cpu.out SQUISH_MEMPROFILE=mem.out ./squish enc -codec RAW -o ./output.sqz ./input
-```
