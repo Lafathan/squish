@@ -42,6 +42,11 @@ var StringToCodecIDMap = map[string]uint8{
 	"HUFFMAN": HUFFMAN,
 }
 
+// codec aliases
+var CodecAliases = map[string]string{
+	"RHUFF": "RLE-HUFFMAN",
+}
+
 // codec interface
 type Codec interface {
 	EncodeBlock(src []byte) (dst []byte, err error)

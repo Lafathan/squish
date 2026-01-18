@@ -70,6 +70,9 @@ func runEnc(args []string) sqerr.Code {
 		fmt.Fprintf(os.Stdout, "enc: missing required -codec\n")
 		return sqerr.Usage
 	}
+	for alias, expandedCodecs := range codec.CodecAliases {
+		*codecPipe = strings.ReplaceAll(*codecPipe, alias, expandedCodecs)
+	}
 	codecStrings := strings.Split(*codecPipe, "-")
 	codecList := make([]uint8, 0, len(codecStrings))
 	for _, cString := range codecStrings {
