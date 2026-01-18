@@ -61,15 +61,15 @@ func shiftByteSliceLeft(bytes []byte, length int) []byte {
 	return newBits
 }
 
-func getFrequencyMap(src []byte) []int {
-	freqMap := make([]int, 256)
+func getFrequencyMap(src []byte) *[256]int {
+	freqMap := [256]int{}
 	for _, b := range src {
 		freqMap[b]++
 	}
-	return freqMap
+	return &freqMap
 }
 
-func getHuffmanTreeFromFreqMap(freqMap []int) *node {
+func getHuffmanTreeFromFreqMap(freqMap *[256]int) *node {
 	leaves := &huffmanHeap{}       // instantiate a heap
 	heap.Init(leaves)              // initialize it
 	for b, freq := range freqMap { // add nodes to the heap based on the freq map
