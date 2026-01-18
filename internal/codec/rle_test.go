@@ -7,17 +7,19 @@ import (
 
 func RLENEncodeDecode(message string, t *testing.T) {
 	for i := 1; i < 5; i++ {
-		rle := RLENCodec{byteLength: i}
-		coded, err := rle.EncodeBlock([]byte(message))
-		if err != nil {
-			t.Fatalf("RLE encoding failed")
-		}
-		decoded, err := rle.DecodeBlock(coded)
-		if err != nil {
-			t.Fatalf("RLE decoding failed")
-		}
-		if message != string(decoded) {
-			t.Fatalf("RLE encoding mismatch: got %s - expected %s", string(decoded), message)
+		for _, l := range []bool{true, false} {
+			rle := RLECodec{byteLength: i, lossless: l}
+			coded, err := rle.EncodeBlock([]byte(message))
+			if err != nil {
+				t.Fatalf("RLE encoding failed")
+			}
+			decoded, err := rle.DecodeBlock(coded)
+			if err != nil {
+				t.Fatalf("RLE decoding failed")
+			}
+			if message != string(decoded) && rle.lossless {
+				t.Fatalf("RLE encoding mismatch: got %s - expected %s", string(decoded), message)
+			}
 		}
 	}
 }
@@ -48,8 +50,12 @@ func TestRLENEmptyMessage(t *testing.T) {
 }
 
 func TestRLENLossless(t *testing.T) {
-	rle := RLENCodec{}
+	rle := RLECodec{lossless: true}
 	if !rle.IsLossless() {
 		t.Fatalf("RLE is lossless, but returned lossy")
+	}
+	rle = RLECodec{lossless: false}
+	if rle.IsLossless() {
+		t.Fatalf("LRLE is lossy, but returned lossless")
 	}
 }
