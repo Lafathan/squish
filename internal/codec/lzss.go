@@ -1,19 +1,53 @@
 package codec
 
 const (
-	maxLookBack = 1<<12 - 1 // 4095 - how far back to look for matches
-	maxMatchLen = 1<<4 - 1  // 15 - how far forward you can match (after min match)
-	minMatchLen = 3         // min match length
+	maxLookBack = 1<<12 - 1              // 4095 - how far back to look for matches
+	minMatchLen = 3                      // min match length
+	maxMatchLen = 1<<4 - 1 + minMatchLen // 15 - how far forward you can match (after min match)
 )
 
 type LZSSCodec struct{}
 
+func balanceBytes(lookBack int, runLength int) []byte {
+	a := byte((lookBack >> 4) & 0xFF)                        // keep the 8 MSb of the lookback in one byte
+	b := byte(((lookBack << 4) & 0xF0) | (runLength & 0x0F)) // and 4 LSb of lookback + 4 bit length in other byte
+	return []byte{a, b}
+}
+
 func findMatches(backward []byte, forward []byte) (byte, []byte) {
-	return byte(0), []byte{}
+	var (
+		matched     bool = true // whether or not the we are currently matched
+		matchCount  int  = 0    // length of current match
+		maxMatch    int  = 0    // length of longest match so far
+		maxMatchIdx int  = 0    // index of longest match so far
+	)
+	for i := range len(backward) {
+		matchCount = 0                                        // reset match count for each element in lookback window
+		matched = backward[matchCount] == forward[matchCount] // grab the first potential match
+		for matched {                                         // while we are matched
+			matchCount++ // keep counting up how long the match is
+			if i+matchCount >= len(backward) || matchCount >= len(forward) {
+				break // break out if we are about to exceed the length of anything being compared
+			}
+			matched = backward[i+matchCount] == forward[matchCount] // are we still matched?
+		}
+		if matchCount > maxMatch {
+			maxMatch = matchCount // keep the longest match
+			maxMatchIdx = i       // store the index of the longest match so far
+		}
+		if matchCount == maxMatchLen {
+			break // we found the longest possible match, break
+		}
+		i++ // go to the next element in the lookback window
+	}
+	if maxMatch > minMatchLen { // make sure the longest match is even worth encoding
+		return byte(1), balanceBytes(len(backward)-maxMatchIdx, maxMatch-minMatchLen)
+	}
+	return byte(0), []byte{forward[0]} // otherwise return the literal
 }
 
 func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
-	// encodes src using a flag - lookback - run technique
+	// encodes src using a flagBit - lookback - run technique
 	// ex: Mellow yellow fellow says hello! (length 32)
 	// a byte where each bit representing 0 - byte literal or 1 - lookback-run pair
 	// [00000000] M  e l l o w _ y
@@ -24,35 +58,39 @@ func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
 	// lookback - run values are spread over two bytes
 	// first 12 bits are lookback, last 4 bits are run length + 3 (since 3 is min length)
 	var (
-		srcIdx    int    = 0
-		srcLen    int    = len(src)
-		flagByte  byte   = 0
-		flagIdx   int    = 7
-		output    []byte = make([]byte, 0, len(src)*9/8)
-		curStream []byte = make([]byte, 0, 17)
-		flag      byte   = 0
-		bytes     []byte = make([]byte, 0, 2)
-		lookBack  int    = 0
-		lookAhead int    = 0
+		srcIdx    int    = 0                             // where you are in the input
+		srcLen    int    = len(src)                      // length of the input
+		flagByte  byte   = 0                             // value of the flag byte
+		flagIdx   int    = 7                             // index of flag byte to be edited
+		output    []byte = make([]byte, 0, len(src)*9/8) // output byte slice
+		curStream []byte = make([]byte, 0, 16)           // current stream of output bytes corresponding to the flag byte
+		flagBit   byte   = 0                             // flag bit value
+		bytes     []byte = make([]byte, 0, 2)            // literal byte or lookback-run byte pair
+		lookBack  int    = 0                             // lookback value (changes at start of block
+		lookAhead int    = 0                             // lookAhead value (changes at end of block)
 	)
-	for srcIdx < len(src) {
-		lookBack = min(srcIdx-maxLookBack, 0)
-		lookAhead = min(srcIdx+maxMatchLen+minMatchLen, srcLen)
-		flag, bytes = findMatches(src[lookBack:srcIdx], src[srcIdx:lookAhead])
-		flagByte |= (flag << flagIdx) & (1 << flagIdx)
-		curStream = append(curStream, bytes[0])
-		if flag > 0 {
-			curStream = append(curStream, bytes[1])
+	for srcIdx < srcLen {
+		lookBack = max(srcIdx-maxLookBack, 0)                                        // get valid lookback value
+		lookAhead = min(srcIdx+maxMatchLen, srcLen)                                  // get valid lookahead value
+		flagBit, bytes = findMatches(src[lookBack:lookAhead], src[srcIdx:lookAhead]) // get flag bit and literal / lookback-run bytes
+		flagByte |= (flagBit << flagIdx) & (1 << flagIdx)                            // add flagbit to the flagByte
+		curStream = append(curStream, bytes[0])                                      // add first byte to stream (literal or lookback)
+		if flagBit > 0 {                                                             // if it was a lookback-run byte pair
+			curStream = append(curStream, bytes[1]) // add the run length bytes too
+			srcIdx += int(bytes[1] & 0x0F)          // jump ahead to the end of the current run
+		} else {
+			srcIdx++ // move to the next byte
 		}
-		if flagIdx == 0 {
-			output = append(output, flagByte)
-			output = append(output, curStream...)
-			curStream = make([]byte, 0, 17)
-			flagIdx = 7
+		if flagIdx == 0 { // if you are at the end of the current flag byte
+			output = append(output, flagByte)     // append the flag byte to the output
+			output = append(output, curStream...) // append the current stream of encoded data to the output
+			curStream = curStream[:0]             // remake the current stream
+			flagIdx = 7                           // reset the flag index
+		} else {
+			flagIdx-- // decrement the flag index
 		}
-		srcIdx++
 	}
-	return src, nil
+	return output, nil
 }
 
 func (LZSSCodec) DecodeBlock(src []byte) ([]byte, error) {
