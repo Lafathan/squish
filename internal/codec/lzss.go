@@ -14,6 +14,12 @@ func balanceBytes(lookBack int, runLength int) []byte {
 	return []byte{a, b}
 }
 
+func splitBytes(byte1 byte, byte2 byte) (int, int) {
+	lookback := (int(byte1) << 4) | int((byte2>>4)&0x0F)
+	runLen := int(byte2&0x0F) + minMatchLen
+	return lookback, runLen
+}
+
 func findMatches(backward []byte, forward []byte) (byte, []byte) {
 	var (
 		matched     bool = true // whether or not the we are currently matched
@@ -21,7 +27,7 @@ func findMatches(backward []byte, forward []byte) (byte, []byte) {
 		maxMatch    int  = 0    // length of longest match so far
 		maxMatchIdx int  = 0    // index of longest match so far
 	)
-	for i := range len(backward) {
+	for i := range len(backward) - len(forward) { // stop when i == start of forward
 		matchCount = 0                                        // reset match count for each element in lookback window
 		matched = backward[matchCount] == forward[matchCount] // grab the first potential match
 		for matched {                                         // while we are matched
@@ -47,6 +53,9 @@ func findMatches(backward []byte, forward []byte) (byte, []byte) {
 }
 
 func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
+	if len(src) == 0 {
+		return []byte{}, nil
+	}
 	// encodes src using a flagBit - lookback - run technique
 	// ex: Mellow yellow fellow says hello! (length 32)
 	// a byte where each bit representing 0 - byte literal or 1 - lookback-run pair
@@ -76,8 +85,8 @@ func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
 		flagByte |= (flagBit << flagIdx) & (1 << flagIdx)                            // add flagbit to the flagByte
 		curStream = append(curStream, bytes[0])                                      // add first byte to stream (literal or lookback)
 		if flagBit > 0 {                                                             // if it was a lookback-run byte pair
-			curStream = append(curStream, bytes[1]) // add the run length bytes too
-			srcIdx += int(bytes[1] & 0x0F)          // jump ahead to the end of the current run
+			curStream = append(curStream, bytes[1])    // add the run length bytes too
+			srcIdx += int(bytes[1]&0x0F) + minMatchLen // jump ahead to the end of the current run
 		} else {
 			srcIdx++ // move to the next byte
 		}
@@ -86,15 +95,71 @@ func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
 			output = append(output, curStream...) // append the current stream of encoded data to the output
 			curStream = curStream[:0]             // remake the current stream
 			flagIdx = 7                           // reset the flag index
+			flagByte = 0
 		} else {
 			flagIdx-- // decrement the flag index
 		}
 	}
+	output = append(output, flagByte)     // append the flag byte to the output
+	output = append(output, curStream...) // append the current stream of encoded data to the output
 	return output, nil
 }
 
 func (LZSSCodec) DecodeBlock(src []byte) ([]byte, error) {
-	return src, nil
+	if len(src) == 0 {
+		return []byte{}, nil
+	}
+	var (
+		flagByte byte            // current flag byte
+		flagBit  byte            // current flag bit
+		flagIdx  int             // current flag bit index
+		srcLen   int  = len(src) // length of the input
+		srcIdx   int             // where you are in the input
+		outLen   int             // length of decoded data
+		lookback int             // how far to looking back
+		runLen   int             // how long a run is
+
+	)
+	for srcIdx < srcLen { // scan through the input to count how long the output will be
+		flagByte = src[srcIdx]                     // get the current flag byte
+		srcIdx++                                   // move past the flag byte
+		for flagIdx = 7; flagIdx >= 0; flagIdx-- { // loop through the flag bits
+			flagBit = (flagByte >> flagIdx) & 0x01 // grab the bit
+			if flagBit == 0 {                      // if it is a literal
+				outLen++ // increase the output length by one byte
+				srcIdx++ // move forward as you scan through the source
+			} else {
+				outLen += int(src[srcIdx+1]&0x0F) + minMatchLen // increase the output by the length of the run
+				srcIdx += 2                                     // move forward as you scan through the source
+			}
+			if srcIdx > srcLen {
+				break
+			}
+		}
+	}
+	srcIdx = 0
+	output := make([]byte, 0, outLen) // make the output byte slice
+	for srcIdx < srcLen {             // scan through the input to count how long the output will be
+		flagByte = src[srcIdx]                     // get the current flag byte
+		srcIdx++                                   // move forward in the input
+		for flagIdx = 7; flagIdx >= 0; flagIdx-- { // loop through the flag bits
+			flagBit = (flagByte >> flagIdx) & 0x01 // grab the bit
+			if flagBit == 0 {                      // if it is a literal
+				output = append(output, src[srcIdx]) // add the literal to the output
+				srcIdx++                             // move forward as you scan through the source
+			} else {
+				lookback, runLen = splitBytes(src[srcIdx], src[srcIdx+1]) // get the reference details
+				for range runLen {
+					output = append(output, output[len(output)-lookback]) // copy the match up to the front
+				}
+				srcIdx += 2 // move forward as you scan through the source
+			}
+			if srcIdx > srcLen-1 {
+				break
+			}
+		}
+	}
+	return output, nil
 }
 
 func (LZSSCodec) IsLossless() bool {
