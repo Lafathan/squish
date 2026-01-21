@@ -60,6 +60,7 @@ func runEnc(args []string) sqerr.Code {
 	// parse and display "listCodec"
 	if *listCodecs {
 		codecNames := slices.Collect(maps.Keys(codec.StringToCodecIDMap))
+		codecNames = append(codecNames, slices.Collect(maps.Keys(codec.CodecAliases))...)
 		sort.Strings(codecNames)
 		fmt.Fprintf(os.Stdout, "%s\n", strings.Join(codecNames, ", "))
 		return sqerr.Success

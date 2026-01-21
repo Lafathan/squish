@@ -12,6 +12,7 @@ const (
 	LRLE3
 	LRLE4
 	HUFFMAN
+	LZSS
 )
 
 // codec key map
@@ -26,6 +27,7 @@ var CodecMap = map[uint8]Codec{
 	LRLE3:   RLECodec{byteLength: 3, lossless: false},
 	LRLE4:   RLECodec{byteLength: 4, lossless: false},
 	HUFFMAN: HUFFMANCodec{},
+	LZSS:    LZSSCodec{},
 }
 
 // codec string to codec ID map
@@ -40,11 +42,12 @@ var StringToCodecIDMap = map[string]uint8{
 	"LRLE3":   LRLE3,
 	"LRLE4":   LRLE4,
 	"HUFFMAN": HUFFMAN,
+	"LZSS":    LZSS,
 }
 
 // codec aliases
 var CodecAliases = map[string]string{
-	"RHUFF": "RLE-HUFFMAN",
+	"DEFLATE": "LZSS-HUFFMAN",
 }
 
 // codec interface
