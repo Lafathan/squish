@@ -164,6 +164,9 @@ Codec IDs are `uint8`.
 - `0x09` HUFFMAN
 - `0x0A` LZSS
 
+Additional codecs are defined via codec aliases when they can be represented by a pipeline.
+- DEFLATE -> LZSS and HUFFMAN
+
 ---
 
 ## 8. End-of-stream behavior
