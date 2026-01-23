@@ -1,8 +1,7 @@
 # Squish `.sqz` File Format Specification (Draft)
 
-> Status: **DRAFT / WORKING DOC**  
+> Status: **DRAFT**  
 > This document describes the on-disk format for Squish-compressed streams with the `.sqz` extension.
-> Some fields and semantics are intentionally left as placeholders so the format can evolve.
 
 ---
 
@@ -12,11 +11,11 @@
 - **Streamable**: decode sequentially without seeking.
 - **Block-based**: enables bounded memory usage and partial recovery.
 - **Codec-agnostic**: frames and blocks declare how to decode their payload.
-- **Integrity options**: checksum fields are well-defined and unambiguous.
+- **Integrity options**: encoded/decoded payload size veriication and option checksum fields.
 
 ### Non-goals
 - Random access (unless explicitly enabled by an index feature in a future version).
-- Encrypting or authenticating content (checksums are not security).
+- Encrypting or authenticating content.
 - Forward/backward-compatible: At this early stage, new features might be added that break old decoders.
 
 ---
@@ -39,15 +38,15 @@
 All multi-byte integer fields are **big-endian** unless stated otherwise.
 
 ### 3.2 Integer types
-- `uint8`  : unsigned 8-bit
-- `uint16` : unsigned 16-bit
-- `uint32` : unsigned 32-bit
-- `uint64` : unsigned 64-bit
+- `uint8`   : unsigned 8-bit
+- `uint16`  : unsigned 16-bit
+- `uint32`  : unsigned 32-bit
+- `uint64`  : unsigned 64-bit
+- `uvarint` : unsigned variable length
 
-### 3.3 Sizes and limits (placeholders)
-These are recommended initial limits:
+### 3.3 Sizes and limits
 - Max block raw size: `<= 64 MiB`
-- Max block payload size: `<= raw size + overhead`
+- Max block payload size: `<= raw size + header`
 - Max pipeline length: `<= 255` codecs
 
 ---
@@ -62,7 +61,7 @@ A `.sqz` stream is:
 | Block 1 |
 | ... |
 
-A decoder reads the header, then decodes blocks sequentially until it reaches an explicit end marker block.
+A decoder reads the header, then decodes blocks sequentially until it reaches an explicit end-of-stream marker block.
 
 ---
 
@@ -79,29 +78,29 @@ A decoder reads the header, then decodes blocks sequentially until it reaches an
 | Codec Count | uint8 |
 | Codec List | [Codec Count]uint8 |
 
-#### 5.2 Magic (3 bytes)
+### 5.2 Magic (3 bytes)
 Identifies a Squish stream.
 - `"SQZ"`
 
-#### 5.3 Flags (byte)
-Bitfield controlling baseline behaviors. Placeholder bits:
+### 5.3 Flags (byte)
+Bitfield controlling baseline behaviors.
 - `bit 0`: Not used
 - `bit 1`: Not used
 - ...
 - `bit 7`: Not used
 
-#### 5.4 Checksum mode (uint8)
-Integer describing checksum protocals to apply to each block during decoding:
+### 5.4 Checksum mode (uint8)
+Integer describing checksum protocals to apply to each block during decoding.
 - `0`: No checksums used
 - `1`: Uncompressed data is validated via crc32 checksum
 - `2`: Compressed data is validated via crc32 checksum
 - `3`: Both uncompressed and compressed data is validated via crc32 checksum
 
-#### 5.5 Codec List Length (uint8)
-Length of codecs in the pipeline
+### 5.5 Codec List Length (uint8)
+Number of codecs in the pipeline.
 
 ### 5.6 Codec List ([]uint8)
-List of uint8 values representing the codec IDs in the pipline in order they were applied during encoding
+List of uint8 values representing the codec IDs in the pipline in order they were applied during encoding. The decoding process involves applying the decode methods of these codecs in the opposite order.
 
 ---
 
@@ -116,9 +115,9 @@ Each block begins with a fixed header:
 | Block Type | uint8 |
 | Codec Count | uint8 |
 | Codecs | [Codec Count]uint8 |
-| Raw Size | varint64 |
-| Payload Size | varint64 |
-| Optional Checksums | 0, 8, or 16 bytes (depending on checksum mode) |
+| Raw Size | uvarint |
+| Payload Size | uvarint |
+| Optional Checksums | 0, 8, or 16 bytes (depends on checksum mode in frame header) |
 
 
 ### 6.2 Block Type (uint8)
@@ -126,7 +125,7 @@ Defines how to interpret the block and whether it emits bytes.
 
 - `0x00` End-of-stream marker (no payload; marks the end of the block)
 - `0x01` Frame encoded data block (normal)
-- `0x02` Block encoded data block (uses a specific encoding and may not adhere to frame encoding)
+- `0x02` Block encoded data block (uses a specific encoding pipeline and may not adhere to frame encoding)
 
 ### 6.3 Codec Count (uint8)
 Number of codecs in the pipeline. Only present when block type is `0x02`.
@@ -161,8 +160,8 @@ Codec IDs are `uint8`.
 - `0x06` LRLE2 (lossy, 2-byte stride)
 - `0x07` LRLE3 (lossy, 3-byte stride)
 - `0x08` LRLE4 (lossy, 4-byte stride)
-- `0x09` HUFFMAN
-- `0x0A` LZSS
+- `0x09` HUFFMAN (canonical)
+- `0x0A` LZSS 
 
 Additional codecs are defined via codec aliases when they can be represented by a pipeline.
 - DEFLATE -> LZSS and HUFFMAN
@@ -171,4 +170,4 @@ Additional codecs are defined via codec aliases when they can be represented by 
 
 ## 8. End-of-stream behavior
 
-A stream terminates either by reading a block with `Block Type = EOS`
+A stream terminates by reading a block with `Block Type = 0x00`
