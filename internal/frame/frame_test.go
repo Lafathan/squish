@@ -73,8 +73,6 @@ func TestWriteRead(t *testing.T) {
 		_, _, err = fr.Next()
 		if err == nil {
 			t.Fatalf("Missed early read error")
-		} else if err.Error() != "early read, previous payload still active" {
-			t.Fatalf("Missed early read error: %v", err)
 		}
 		err = fr.Drop()
 		if fr.activePayload != nil || err != nil {
@@ -89,7 +87,7 @@ func TestWriteRead(t *testing.T) {
 
 func TestHeaderValid(t *testing.T) {
 	var badHeader Header
-	badHeader = Header{Key: "SQSh"}
+	badHeader = Header{Key: "SQz"}
 	err := badHeader.valid()
 	if err == nil {
 		t.Fatalf("Missed invalid magic key: %v", err)

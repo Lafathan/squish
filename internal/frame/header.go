@@ -7,7 +7,7 @@ import (
 )
 
 type Header struct {
-	Key          string  // "SQSH" Magic string marking the start of a header
+	Key          string  // Magic string marking the start of a header
 	Flags        uint8   // flags to determine processing
 	Codec        []uint8 // default codec used
 	ChecksumMode uint8   // per block checksum mode
@@ -47,15 +47,15 @@ func (header1 Header) equal(header2 Header) bool {
 
 func readHeader(r io.Reader) (Header, error) {
 	var h Header
-	bytes := make([]byte, 7) // read in the header of the frame
+	bytes := make([]byte, len(MagicKey)+3) // read in the header of the frame
 	_, err := io.ReadFull(r, bytes)
 	if err != nil {
 		return h, fmt.Errorf("failed to read header: %w", err)
 	}
-	h.Key = string(bytes[:4]) // assign values to the header of the FrameReader
-	h.Flags = bytes[4]
-	h.ChecksumMode = bytes[5]
-	codecs := bytes[6]
+	h.Key = string(bytes[:len(MagicKey)]) // assign values to the header of the FrameReader
+	h.Flags = bytes[len(MagicKey)]
+	h.ChecksumMode = bytes[len(MagicKey)+1]
+	codecs := bytes[len(MagicKey)+2]
 	h.Codec = make([]byte, codecs)
 	_, err = io.ReadFull(r, h.Codec)
 	if err != nil {

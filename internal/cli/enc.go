@@ -22,7 +22,7 @@ func runEnc(args []string) sqerr.Code {
 	var (
 		outPath    = flagSet.String("o", "-", "output file path (or '-' for stdout)")
 		outPath2   = flagSet.String("output", "", "output file path (or '-' for stdout)")
-		codecPipe  = flagSet.String("codec", "", "codec pipeline, e.g. RLE-HUFFMAN")
+		codecPipe  = flagSet.String("codec", "DEFLATE", "codec pipeline, e.g. RLE-HUFFMAN")
 		blockSize  = flagSet.String("blocksize", "25KiB", "block size (e.g. 256KiB, 1MiB)")
 		checksum   = flagSet.String("checksum", "", "checksum mode: u|c|uc")
 		listCodecs = flagSet.Bool("list-codecs", false, "list supported codecs and exit")
@@ -34,9 +34,6 @@ func runEnc(args []string) sqerr.Code {
 		fmt.Fprintf(os.Stdout, "USAGE:\n")
 		fmt.Fprintf(os.Stdout, "  squish enc -codec <pipeline> [flags] [input]\n")
 		fmt.Fprintf(os.Stdout, "\n")
-		fmt.Fprintf(os.Stdout, "REQUIRED\n")
-		fmt.Fprintf(os.Stdout, "  -codec <pipeline>        Codec pipeline, e.g. RLE-HUFFMAN\n")
-		fmt.Fprintf(os.Stdout, "\n")
 		fmt.Fprintf(os.Stdout, "FLAGS:\n")
 		flagSet.PrintDefaults()
 		fmt.Fprintf(os.Stdout, "\n")
@@ -47,7 +44,7 @@ func runEnc(args []string) sqerr.Code {
 		fmt.Fprintf(os.Stdout, "EXAMPLES:\n")
 		fmt.Fprintf(os.Stdout, "  squish enc ./input.txt -codec RLE-HUFFMAN -o ./output.sqz\n")
 		fmt.Fprintf(os.Stdout, "  squish enc - -codec RLE -blocksize 128KiB -o ./out.sqz\n")
-		fmt.Fprintf(os.Stdout, "  squish enc ./data.bin -codec RAW -o - > data.sqz\n")
+		fmt.Fprintf(os.Stdout, "  squish enc ./data.bin -o - > data.sqz\n")
 	}
 
 	if err := flagSet.Parse(args); err != nil {

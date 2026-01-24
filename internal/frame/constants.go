@@ -1,6 +1,6 @@
 package frame
 
-const MagicKey = "SQSH"
+const MagicKey = "SQZ"
 const MaxBlockSize = 1<<16 - 1
 
 // Block types
