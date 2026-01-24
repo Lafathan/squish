@@ -12,8 +12,8 @@ func runDec(args []string) sqerr.Code {
 	flagSet := flag.NewFlagSet("dec", flag.ContinueOnError)
 	flagSet.SetOutput(os.Stdout)
 	var (
-		outPath  = flagSet.String("o", "-", "output file path (or '-' for stdout)")
-		outPath2 = flagSet.String("output", "", "output file path (or '-' for stdout)")
+		outPath  = flagSet.String("o", "", "output file path (default stdout)")
+		outPath2 = flagSet.String("output", "", "output file path (default stdout)")
 	)
 
 	flagSet.Usage = func() {
@@ -26,9 +26,9 @@ func runDec(args []string) sqerr.Code {
 		flagSet.PrintDefaults()
 		fmt.Fprintf(os.Stdout, "\n")
 		fmt.Fprintf(os.Stdout, "EXAMPLES:\n")
-		fmt.Fprintf(os.Stdout, "  squish dec ./file.sqz -o ./file\n")
-		fmt.Fprintf(os.Stdout, "  squish dec ./file.sqz -o -\n")
-		fmt.Fprintf(os.Stdout, "  squish enc ./data.bin -codec RAW -o - > data.sqz\n")
+		fmt.Fprintf(os.Stdout, "  squish dec -o ./file ./file.sqz\n")
+		fmt.Fprintf(os.Stdout, "  squish dec ./file.sqz \n")
+		fmt.Fprintf(os.Stdout, "  squish enc -codec RAW ./data.bin > data.sqz\n")
 	}
 
 	if err := flagSet.Parse(args); err != nil {
@@ -45,12 +45,12 @@ func runDec(args []string) sqerr.Code {
 	}
 	var outFile *os.File
 	var closeFile bool
-	if output == "-" || output == "" {
+	if output == "" {
 		outFile = os.Stdout
 	} else {
 		f, err := os.Create(output)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "dec: failed to write file %q\n\n:%v", output, err)
+			fmt.Fprintf(os.Stderr, "dec: failed to write file %q: %v", output, err)
 			return sqerr.IO
 		}
 		outFile = f
@@ -62,7 +62,7 @@ func runDec(args []string) sqerr.Code {
 
 	// get positional arguments
 	remainingArgs := flagSet.Args()
-	input := "-"
+	input := ""
 	if len(remainingArgs) >= 1 {
 		input = remainingArgs[0]
 	}
@@ -74,12 +74,12 @@ func runDec(args []string) sqerr.Code {
 	// open the input file
 	var inFile *os.File
 	closeFile = false
-	if input == "-" || input == "" {
+	if input == "" {
 		inFile = os.Stdin
 	} else {
 		f, err := os.Open(input)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "dec: failed to open input file %q\n\n", input)
+			fmt.Fprintf(os.Stderr, "dec: failed to open input file %q", input)
 			return sqerr.IO
 		}
 		inFile = f

@@ -1,6 +1,6 @@
 # squish
 
-`squish` is a small Go-based compression/decompression utility that writes a custom `.sqz` frame format with pluggable codecs (RAW, RLE, and Huffman). It can stream to and from files or stdin/stdout and supports optional checksums and block sizing.
+`squish` is a small Go-based compression/decompression utility that writes a custom `.sqz` frame format with pluggable codecs (RAW, RLE, Huffman, LZSS, etc.). It can stream to and from files or stdin/stdout and supports optional checksums and block sizing.
 
 ## Features
 
@@ -26,14 +26,14 @@ go build ./cmd/squish
 ### List available codecs
 
 ```sh
-./squish enc --list-codecs
+./squish enc -list-codecs
 ```
 
 ### Encode
 
 ```sh
 ./squish enc -codec RLE-HUFFMAN -o ./output.sqz ./input.txt
-./squish enc -codec RAW --blocksize 256KiB -o ./output.sqz -
+./squish enc -codec RAW -blocksize 256KiB -o ./output.sqz -
 ```
 
 ### Decode
@@ -48,11 +48,11 @@ go build ./cmd/squish
 ### `enc`
 
 - `-codec`: codec pipeline (e.g. `RLE-HUFFMAN`, default DEFLATE)
-- `--blocksize`: block size (e.g. `256KiB`, `1MiB`, default 25KiB)
-- `--checksum`: checksum mode (`u`, `c`, or `uc`, default None)
+- `-blocksize`: block size (e.g. `256KiB`, `1MiB`, default 25KiB)
+- `-checksum`: checksum mode (`u`, `c`, or `uc`, default None)
 - `-o, --output`: output path (`-` for stdout, default `-`)
-- `--list-codecs`: list supported codecs and exit
+- `-list-codecs`: list supported codecs and exit
 
 ### `dec`
 
-- `-o, --output`: output path (`-` for stdout, default `-`)
+- `-o, -output`: output path (`-` for stdout, default `-`)

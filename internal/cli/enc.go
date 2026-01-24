@@ -20,8 +20,8 @@ func runEnc(args []string) sqerr.Code {
 	flagSet.SetOutput(os.Stdout)
 
 	var (
-		outPath    = flagSet.String("o", "-", "output file path (or '-' for stdout)")
-		outPath2   = flagSet.String("output", "", "output file path (or '-' for stdout)")
+		outPath    = flagSet.String("o", "", "output file path (default stdout)")
+		outPath2   = flagSet.String("output", "", "output file path (default stdout)")
 		codecPipe  = flagSet.String("codec", "DEFLATE", "codec pipeline, e.g. RLE-HUFFMAN")
 		blockSize  = flagSet.String("blocksize", "25KiB", "block size (e.g. 256KiB, 1MiB)")
 		checksum   = flagSet.String("checksum", "", "checksum mode: u|c|uc")
@@ -38,13 +38,19 @@ func runEnc(args []string) sqerr.Code {
 		flagSet.PrintDefaults()
 		fmt.Fprintf(os.Stdout, "\n")
 		fmt.Fprintf(os.Stdout, "PIPELINE SYNTAX:\n")
-		fmt.Fprintf(os.Stdout, "  -codec CODEC1-CODEC2-... applies codecs in order.\n")
+		fmt.Fprintf(os.Stdout, "  -codec CODEC1-CODEC2-... applies codecs in order, left-to-right.\n")
 		fmt.Fprintf(os.Stdout, "  Codec names are case-insensitive.\n")
+		fmt.Fprintf(os.Stdout, "\n")
+		fmt.Fprintf(os.Stdout, "BLOCKSIZE SYNTAX:\n")
+		fmt.Fprintf(os.Stdout, "  -blocksize <value><unit>.\n")
+		fmt.Fprintf(os.Stdout, "  <value> is a non-zero integer.\n")
+		fmt.Fprintf(os.Stdout, "  <unit> options are B, KB, KiB, MB, and MiB.\n")
+		fmt.Fprintf(os.Stdout, "  Units are case sensitive.\n")
 		fmt.Fprintf(os.Stdout, "\n")
 		fmt.Fprintf(os.Stdout, "EXAMPLES:\n")
 		fmt.Fprintf(os.Stdout, "  squish enc ./input.txt -codec RLE-HUFFMAN -o ./output.sqz\n")
-		fmt.Fprintf(os.Stdout, "  squish enc - -codec RLE -blocksize 128KiB -o ./out.sqz\n")
-		fmt.Fprintf(os.Stdout, "  squish enc ./data.bin -o - > data.sqz\n")
+		fmt.Fprintf(os.Stdout, "  squish enc -codec RLE -blocksize 128KiB -o ./out.sqz\n")
+		fmt.Fprintf(os.Stdout, "  squish enc ./data.bin -o > data.sqz\n")
 	}
 
 	if err := flagSet.Parse(args); err != nil {
@@ -65,7 +71,7 @@ func runEnc(args []string) sqerr.Code {
 
 	// parse codec pipeline
 	if *codecPipe == "" {
-		fmt.Fprintf(os.Stdout, "enc: missing required -codec\n")
+		fmt.Fprintf(os.Stdout, "enc: missing required -codec")
 		return sqerr.Usage
 	}
 	for alias, expandedCodecs := range codec.CodecAliases {
@@ -75,12 +81,12 @@ func runEnc(args []string) sqerr.Code {
 	codecList := make([]uint8, 0, len(codecStrings))
 	for _, cString := range codecStrings {
 		if cString == "" {
-			fmt.Fprintf(os.Stderr, "enc: empty codec in pipeline\n")
+			fmt.Fprintf(os.Stderr, "enc: empty codec in pipeline")
 			return sqerr.Usage
 		}
 		codecID, ok := codec.StringToCodecIDMap[strings.ToUpper(cString)]
 		if !ok {
-			fmt.Fprintf(os.Stderr, "enc: unknown codec %q (try: squish enc --list-codecs)\n", cString)
+			fmt.Fprintf(os.Stderr, "enc: unknown codec %q (try: squish enc -list-codecs)", cString)
 			return sqerr.Unsupported
 		}
 		codecList = append(codecList, codecID)
@@ -93,7 +99,7 @@ func runEnc(args []string) sqerr.Code {
 	}
 	var outFile *os.File
 	var closeFile bool
-	if output == "-" || output == "" {
+	if output == "" {
 		outFile = os.Stdout
 	} else {
 		f, err := os.Create(output)
@@ -120,7 +126,7 @@ func runEnc(args []string) sqerr.Code {
 	case "uc":
 		checksumFlag = frame.UncompressedChecksum | frame.CompressedChecksum
 	default:
-		fmt.Fprintf(os.Stderr, "enc: unknown checksum value %q\n", *checksum)
+		fmt.Fprintf(os.Stderr, "enc: unknown checksum value %q", *checksum)
 		return sqerr.Usage
 	}
 
@@ -136,7 +142,7 @@ func runEnc(args []string) sqerr.Code {
 		if found {
 			val, err := strconv.Atoi(prefix)
 			if err != nil || val <= 0 {
-				fmt.Printf("enc: invalid blocksize %q (expected e.g. 256KiB, 1MiB)\n", bs)
+				fmt.Printf("enc: invalid blocksize %q (expected e.g. 256KiB, 1MiB)", bs)
 				return sqerr.Usage
 			}
 			blockByteSize = val * mags[i]
@@ -145,30 +151,30 @@ func runEnc(args []string) sqerr.Code {
 		}
 	}
 	if !matched {
-		fmt.Printf("enc: invalid blocksize %q (expected e.g. 256KiB, 1MiB)\n", bs)
+		fmt.Printf("enc: invalid blocksize %q (expected e.g. 256KiB, 1MiB)", bs)
 		return sqerr.Usage
 	}
 
 	// get positional arguments
 	remainingArgs := flagSet.Args()
-	input := "-"
+	input := ""
 	if len(remainingArgs) >= 1 {
 		input = remainingArgs[0]
 	}
 	if len(remainingArgs) > 1 {
-		fmt.Fprintf(os.Stderr, "enc: too many positional arguments (expected at most 1)\n")
+		fmt.Fprintf(os.Stderr, "enc: too many positional arguments (expected at most 1)")
 		return sqerr.Usage
 	}
 
 	// open the input file
 	var inFile *os.File
 	closeFile = false
-	if input == "-" || input == "" {
+	if input == "" {
 		inFile = os.Stdin
 	} else {
 		f, err := os.Open(input)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "enc: failed to open input file %q\n", input)
+			fmt.Fprintf(os.Stderr, "enc: failed to open input file %q", input)
 			return sqerr.IO
 		}
 		inFile = f

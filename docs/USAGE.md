@@ -44,8 +44,8 @@ Squish does *not* currently aim to:
 ### From source
 ```bash
 go install squish/cmd/squish@latest
-squish --version
-squish --help
+squish -version
+squish -help
 ```
 ## Quickstart
 ### Compress a file
@@ -58,7 +58,7 @@ squish dec -o output.bin input.sqz
 ```
 ### Use a pipeline
 ```bash
-squish enc -o output.sqz --codec rle-huffman input.bin
+squish enc -o output.sqz -codec rle-huffman input.bin
 ```
 
 ## Core concepts
@@ -86,8 +86,8 @@ squish enc -o [output] [flags] [input]
 ##### Examples
 ```bash
 squish enc -o data.sqz data.bin
-squish enc -o data.sqz --codec huffman data.bin
-squish enc -o data.sqz --codec rle-huffman --blocksize 256KiB data.bin
+squish enc -o data.sqz -codec huffman data.bin
+squish enc -o data.sqz -codec rle-huffman -blocksize 256KiB data.bin
 ```
 ##### Behavior
 If -o is omitted, output goes to stdout.
@@ -97,9 +97,11 @@ By default, Squish uses DEFLATE with a 25KiB block size and no checksum integrit
 
 ##### Common flags
 
-`--codec <pipeline>`: Selects codec(s) used for compression.
-`--blocksize <n>`: Sets block size (see Block sizing).
-`--checksum <mode>`: Controls checksum behavior (see Checksums).
+`-codec <pipeline>`: Selects codec(s) used for compression.
+
+`-blocksize <n>`: Sets block size (see Block sizing).
+
+`-checksum <mode>`: Controls checksum behavior (see Checksums).
 
 #### squish dec
 Decompresses a `.sqz` stream back to raw bytes.
@@ -122,12 +124,12 @@ A pipeline is a list of codecs to be applied or that have been applied to a stre
 
 The dash/hyphen symbol is used to delineate between codecs with no whitespace. Codec names are not case sensitive. Unknown codecs return with an "unknown codec" error and unsupported exit code. 
 
-Run the `squish enc --list-codecs` command for a list of canonical names of available codecs to use in pipelines.
+Run the `squish enc -list-codecs` command for a list of canonical names of available codecs to use in pipelines.
 
 Example:
 ```bash
---codec "rle-huffman"
---codec "LRLE2-RLE-LZSS-HUFFMAN"
+-codec "rle-huffman"
+-codec "LRLE2-RLE-LZSS-HUFFMAN"
 ```
 #### Available codecs
 - RAW - Pass-through mode: stores the data as-is with only Squish framing/metadata. Useful as a baseline for benchmarking and for verifying the container/IO path without compression effects.
@@ -146,9 +148,9 @@ Compression applies left-to-right; decompression reverses that.
 ### Checksums and verification
 Squish validates block boundaries using stored compressed/uncompressed sizes. CRC32 checksums (optional) provide integrity validation of the bytes, not just the lengths. The user has the option to apply checksum validation to the uncompressed data, the compressed data, or both. These validation checks are stored and applied to each and every block.
 ```bash
---checksum u  # applied to uncompressed data
---checksum c  # applied to compressed data
---checksum uc # applied to both compressed and uncompressed data
+-checksum u  # applied to uncompressed data
+-checksum c  # applied to compressed data
+-checksum uc # applied to both compressed and uncompressed data
 ```
 In the case that a checksum fails, squish returns with a corrupt error code and stops decompressing. Partial output may have been written at this point. At this time, there is no option to continue with the decompression or try to recover any further data. If decompressing to a file, consider writing to a temprorary file and renaming on success to avoid overwriting with partial data on corruption.
 
@@ -167,13 +169,13 @@ The valid units are as follows
 - MB -  Megabyte (1,000,000 bytes)
 - B - Byte
 ```bash
---blocksize 256KiB
---blocksize 1MiB
---blocksize 4096B
+-blocksize 256KiB
+-blocksize 1MiB
+-blocksize 4096B
 ```
 
 ### Working with stdin/stdout
-Squish defaults to stdin and stdout when not given any -o, --output, or [input] values. This makes it extremely easy to use in conjunction with commands whose output you want to compress/decompress.
+Squish defaults to stdin and stdout when not given any -o, -output, or [input] values. This makes it extremely easy to use in conjunction with commands whose output you want to compress/decompress.
 ```bash
 cat input.bin | squish enc > out.sqz
 cat out.sqz | squish dec > restored.bin
