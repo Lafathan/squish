@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"squish/internal/bitio"
 )
 
@@ -24,7 +25,7 @@ type node struct {
 }
 
 type hCode struct {
-	bits   []byte
+	bits   *big.Int
 	length int
 }
 
@@ -90,48 +91,33 @@ func getHuffmanTreeFromFreqMap(freqMap *[256]int) *node {
 	return heap.Pop(leaves).(*node)
 }
 
-// func getHuffmanDictFromTree(tree *node) *[256]hCode {
 func getHuffmanLengthsFromTree(tree *node) *[256]uint8 {
-	//dict := [256]hCode{} // store the byte - code pairs
-	lengths := [256]uint8{} // store the bit lengths for each symbol at the index of that symbol
-	//var getCode func(n *node, c *hCode) // define a func for recursive depth first search
+	lengths := [256]uint8{}            // store the bit lengths for each symbol at the index of that symbol
 	var getCode func(n *node, l uint8) // define a func for recursive depth first search
-	//getCode = func(n *node, c *hCode) {
 	getCode = func(n *node, l uint8) {
 		if n.nodeType == leaf {
-			//dict[n.value] = *c // update the dictionary when you arrive at a leaf
 			if l == 0 {
 				l = 1 // protection from single symbol tree
 			}
 			lengths[n.value] = l // update the list of lengths when you arrive at a leaf
 		} else {
-			//lBits := shiftByteSliceLeft(c.bits, c.length)
-			//rBits := append([]byte(nil), lBits...)
-			//rBits[len(rBits)-1] |= 0x01
-			//getCode(n.children[0], &hCode{bits: lBits, length: c.length + 1}) // recurse for children
-			//getCode(n.children[1], &hCode{bits: rBits, length: c.length + 1})
 			getCode(n.children[0], l+1) // recurse for children
 			getCode(n.children[1], l+1)
 		}
 	}
 	getCode(tree, 0)
-	//getCode(tree, &hCode{bits: []byte{}, length: 0})
 	return &lengths
 }
 
 func getHuffmanTreeFromDict(d *[256]hCode) *node {
 	root := node{nodeType: branch} // make an empty root node
 	var (
-		buildTree func(n *node, val byte, bits []byte, bitPos int) // define recursive elements
-		byteIndex int
-		shift     int
-		bit       byte
+		buildTree func(n *node, val byte, bits *big.Int, bitPos int) // define recursive elements
+		bit       uint
 	)
-	buildTree = func(n *node, val byte, bits []byte, bitPos int) {
+	buildTree = func(n *node, val byte, bits *big.Int, bitPos int) {
 		if bitPos >= 0 {
-			byteIndex = len(bits) - 1 - bitPos/8 // get the byte index of that bit
-			shift = bitPos % 8                   // shift required to move the decision bit to lsb
-			bit = (bits[byteIndex] >> shift) & 1 // isolate the decision bit
+			bit = bits.Bit(bitPos)
 			if n.children[bit] == nil {
 				n.children[bit] = &node{nodeType: branch} // create the child node if it doesn't exist
 			}
@@ -152,41 +138,38 @@ func getHuffmanTreeFromDict(d *[256]hCode) *node {
 func getHuffmanDictFromLengths(l *[256]uint8) *[256]hCode {
 	// this functional builds the cononical huffman codes from the code lengths
 	var (
-		d           = [256]hCode{}    // the dictionary to store the data in
-		codeLengths = [256]int{}      // a code length counter for skipping unnecessary loops
-		bitLen      = 0               // current length of bit string
-		curBits     = make([]byte, 1) // byte array representing the bits
-		symbol      int               // current symbol
-		length      uint8             // current length
+		d           = [256]hCode{}  // the dictionary to store the data in
+		codeLengths = [256]int{}    // a code length counter for skipping unnecessary loops
+		curBits     = big.NewInt(0) // new big int to store bit streams
+		symbol      int             // current symbol
+		length      uint8           // current length
 	)
 	for _, length := range l {
 		codeLengths[length]++ // count the lengths
 	}
-	for bitLen < 256 { // loop through all possible lengths
+	for bitLen := 1; bitLen < 256; bitLen++ { // loop through all possible lengths
 		if codeLengths[bitLen] > 0 {
 			for symbol, length = range l { // loop through the symbol - length pairs
-				d[symbol] = hCode{bits: append([]byte(nil), curBits...), length: bitLen} // build the hCode
-				if length == uint8(bitLen) {                                             // we only care about matching length symbols
-					for i := 0; i < len(curBits); i++ {
-						curBits[i]++ // increment the byte array representing the bit strings
-						if curBits[i] != 0x00 {
-							break // stop adding if there is no carryover addition
-						}
-					}
+				if length == uint8(bitLen) { // we only care about matching length symbols
+					d[symbol] = hCode{bits: big.NewInt(0).Set(curBits), length: bitLen}
+					curBits.Add(curBits, big.NewInt(1))
 				}
 			}
 		}
-		curBits = shiftByteSliceLeft(curBits, bitLen) // shift the bits when the bit string length changes
-		bitLen++
+		curBits.Lsh(curBits, 1)
 	}
 	return &d
 }
 
 func serializeHuffmanLengths(l *[256]uint8) []byte {
+	var (
+		symbol int
+		length uint8
+	)
 	// uses cononical huffman encodings by storing only the bit length and symbol
 	out := []byte{}                           // make a place to store the output
 	for bitLen := 1; bitLen < 256; bitLen++ { // loop through all possible lengths in increasing order
-		for symbol, length := range l { // loop through the symbol array
+		for symbol, length = range l { // loop through the symbol array
 			if length == uint8(bitLen) { // if the code length is right
 				out = append(out, byte(length)) // append the bit length
 				out = append(out, byte(symbol)) // and symbol to the output
@@ -209,7 +192,6 @@ func deserializeHuffmanLengths(br io.Reader) (*[256]uint8, error) {
 		if err != nil {
 			return &lengths, fmt.Errorf("error while reading huffman dictionary: %w", err)
 		}
-		fmt.Printf("%v\n", lenSymbolPair)
 		if lenSymbolPair[0] == 0x00 {
 			break // zero bit length marks the end of the dictionary
 		} else {
@@ -230,24 +212,9 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, error) {
 	outBuffer := new(bytes.Buffer)                        // create a new buffer to write to
 	_, err := outBuffer.Write(serializeHuffmanLengths(l)) // write the dictionary to it
 	bw := bitio.NewBitWriter(outBuffer)                   // make a new bitwriter
-	var outInt uint64
 	for _, b := range src {
-		if d[b].length > 64 { // if the bit stream is too large for the bitwriter
-			for _, curByte := range d[b].bits { // write each byte independently
-				err = bw.WriteBits(uint64(curByte), d[b].length) // write the new bits for each symbol
-				if err != nil {
-					return []byte{}, fmt.Errorf("error while writing large bit stream during huffman encoding: %w", err)
-				}
-			}
-		} else {
-			outInt = 0
-			for _, curByte := range d[b].bits {
-				outInt = (outInt << 8) | uint64(curByte) // if it is not too big, make a uint64 that holds the bits
-			}
-			err = bw.WriteBits(outInt, int(d[b].length)) // write the new bits for each symbol
-			if err != nil {
-				return []byte{}, fmt.Errorf("error while writing bit stream during huffman encoding: %w", err)
-			}
+		for i := d[b].length - 1; i >= 0; i-- {
+			err = bw.WriteBits(uint64(d[b].bits.Bit(i)), 1)
 		}
 	}
 	pad, err := bw.Flush() // flush it and report back the number of pad bits
