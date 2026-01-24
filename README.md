@@ -2,6 +2,9 @@
 
 `squish` is a small Go-based compression/decompression utility that writes a custom `.sqz` frame format with pluggable codecs (RAW, RLE, Huffman, LZSS, etc.). It can stream to and from files or stdin/stdout and supports optional checksums and block sizing.
 
+## Stability note
+The `.sqz.` format and codec output are experimental and may change between releases. No forward/backward compatibility guarentees are made yet.
+
 ## Features
 
 - Encode data into `.sqz` frames with a configurable codec pipeline.

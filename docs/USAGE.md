@@ -1,4 +1,5 @@
 
+
 # Squish User Guide
 
 This guide explains how to use `squish` (the CLI), what behavior to expect.
@@ -43,9 +44,9 @@ Squish does *not* currently aim to:
 
 ### From source
 ```bash
-go install squish/cmd/squish@latest
-squish -version
-squish -help
+go build ./cmd/squish
+./squish -version
+./squish -help
 ```
 ## Quickstart
 ### Compress a file
@@ -93,15 +94,16 @@ squish enc -o data.sqz -codec rle-huffman -blocksize 256KiB data.bin
 If -o is omitted, output goes to stdout.
 If input is omitted, input is read from stdin.
 
-By default, Squish uses DEFLATE with a 25KiB block size and no checksum integrity checks. Additionally, if the output already exists, squish will overwrite it.
+##### Defaults
+Squish defaults to using DEFLATE with a 25KiB block size and no checksum integrity checks when no arguments are provided. Additionally, if the output already exists, squish will overwrite it.
 
 ##### Common flags
-
-`-codec <pipeline>`: Selects codec(s) used for compression.
-
-`-blocksize <n>`: Sets block size (see Block sizing).
-
-`-checksum <mode>`: Controls checksum behavior (see Checksums).
+```bash
+-o, -output <file> # Output file
+-codec <pipeline>  # Selects codec(s) used for compression
+-blocksize <n>     # Sets block size (see Block sizing)
+-checksum <mode>   # Checksum behavior (see Checksums)
+```
 
 #### squish dec
 Decompresses a `.sqz` stream back to raw bytes.
@@ -139,11 +141,10 @@ Example:
 - LZSS - Dictionary-based (LZ77-family): encodes repeated sequences by referencing earlier occurrences with (offset, length) pairs, falling back to literals when no good match exists. Strong general-purpose compressor for data with repeated substrings/patterns (text, logs, structured formats).
 - DEFLATE - Convenience alias for the LZSS-HUFFMAN pipeline.
 
-#### Lossy codecs
-**Data loss warning**: Lossy codecs (e.g., LRLE*) intentionally change the data to improve compression ratio. Files compressed with a lossy codec will not decompress to the original bytes, and should not be used for data where exact recovery matters. If you need byte-for-byte fidelity, use lossless codecs only.
-
 #### Decode order
 Compression applies left-to-right; decompression reverses that.
+
+**Data loss warning**: Lossy codecs (e.g., LRLE*) intentionally change the data to improve compression ratio. Files compressed with a lossy codec will not decompress to the original bytes, and should not be used for data where exact recovery matters. If you need byte-for-byte fidelity, use lossless codecs only.
 
 ### Checksums and verification
 Squish validates block boundaries using stored compressed/uncompressed sizes. CRC32 checksums (optional) provide integrity validation of the bytes, not just the lengths. The user has the option to apply checksum validation to the uncompressed data, the compressed data, or both. These validation checks are stored and applied to each and every block.
@@ -158,7 +159,7 @@ In the case that a checksum fails, squish returns with a corrupt error code and 
 Squish encodes data in chunks of a consistent size called blocks. This allows the data to be streamed through squish and not opened entirely in memory allowing for very large files to be compressed.
 
 Smaller blocks: better streaming, more overhead, likely worse compression ratio
-larger blocks: better compression ratio, more memory usage
+Larger blocks: better compression ratio, more memory usage
 
 #### Accepted formats
 The accepted formats are an integer followed by a valid, case-sensitive, unit of byte size.
