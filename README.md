@@ -15,8 +15,6 @@
 go build ./cmd/squish
 ```
 
-The binary will be created at `./squish`.
-
 ## Usage
 
 ### General help
@@ -49,12 +47,12 @@ The binary will be created at `./squish`.
 
 ### `enc`
 
-- `-codec` (required): codec pipeline, e.g. `RLE-HUFFMAN`
-- `--blocksize`: block size (e.g. `256KiB`, `1MiB`)
-- `--checksum`: checksum mode (`u`, `c`, or `uc`)
-- `-o, --output`: output path (`-` for stdout)
+- `-codec`: codec pipeline (e.g. `RLE-HUFFMAN`, default DEFLATE)
+- `--blocksize`: block size (e.g. `256KiB`, `1MiB`, default 25KiB)
+- `--checksum`: checksum mode (`u`, `c`, or `uc`, default None)
+- `-o, --output`: output path (`-` for stdout, default `-`)
 - `--list-codecs`: list supported codecs and exit
 
 ### `dec`
 
-- `-o, --output`: output path (`-` for stdout)
+- `-o, --output`: output path (`-` for stdout, default `-`)
