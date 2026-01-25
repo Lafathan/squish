@@ -43,25 +43,6 @@ func (h *huffmanHeap) Pop() any {
 	return x
 }
 
-func shiftByteSliceLeft(bytes []byte, length int) []byte {
-	bitsByteLength := len(bytes)
-	if length%8 == 0 {
-		bitsByteLength++
-	}
-	newBits := make([]byte, bitsByteLength) // make byte slice to hold children codes
-	offset := 0                             // get an offset if the children have an additional byte
-	if len(newBits) > len(bytes) {
-		offset = 1
-	}
-	for i := range len(bytes) {
-		newBits[i+offset] = (bytes[i] << 1) & 0xFE // shift the parent
-		if i+offset > 0 {                          // store the carryover if necessary
-			newBits[i+offset-1] |= (bytes[i] >> 7) & 0x01
-		}
-	}
-	return newBits
-}
-
 func getFrequencyMap(src []byte) *[256]int {
 	freqMap := [256]int{}
 	for _, b := range src {
