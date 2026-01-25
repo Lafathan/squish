@@ -36,14 +36,14 @@ go build ./cmd/squish
 
 ```sh
 ./squish enc -codec RLE-HUFFMAN -o ./output.sqz ./input.txt
-./squish enc -codec RAW -blocksize 256KiB -o ./output.sqz -
+./squish enc -codec RAW -blocksize 256KiB -o ./output.sqz
 ```
 
 ### Decode
 
 ```sh
-./squish dec -o ./output.txt ./output.sqz
-./squish dec -o - ./output.sqz > ./output.txt
+./squish dec -o ./output.txt ./intput.sqz
+./squish dec ./output.sqz > ./output.txt
 ```
 
 ## Flags
@@ -53,9 +53,9 @@ go build ./cmd/squish
 - `-codec`: codec pipeline (e.g. `RLE-HUFFMAN`, default DEFLATE)
 - `-blocksize`: block size (e.g. `256KiB`, `1MiB`, default 25KiB)
 - `-checksum`: checksum mode (`u`, `c`, or `uc`, default None)
-- `-o, --output`: output path (`-` for stdout, default `-`)
+- `-o, -output`: output path (default stdout)
 - `-list-codecs`: list supported codecs and exit
 
 ### `dec`
 
-- `-o, -output`: output path (`-` for stdout, default `-`)
+- `-o, -output`: output path (default stdout)
