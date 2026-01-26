@@ -1,5 +1,13 @@
 # Change Log
 All notable changes to this project will be documented in this file.
+
+## [0.1.1] - 2026-01-25
+
+Performance improvement for LZSS.
+
+### Changed
+- LZSS encoding saw massive performance improvement using hash look-ups for substring matches
+    + No changes to LZSS API
  
 ## [0.1.0] - 2026-01-24
   
