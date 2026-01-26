@@ -1,107 +1,117 @@
 package codec
 
 const (
-	maxLookBack = 1<<12 - 1              // 4095 - how far back to look for matches
-	minMatchLen = 3                      // min match length
-	maxMatchLen = 1<<4 - 1 + minMatchLen // 15 - how far forward you can match (after min match)
+	maxLookBack  = 1<<12 - 1              // 4095 - how far back to look for matches
+	minMatchLen  = 3                      // min match length
+	maxMatchLen  = 1<<4 - 1 + minMatchLen // 15 - how far forward you can match (after min match)
+	maxMatchIter = 32                     // number of hash matches to look back through before halting
+	hashSize     = 1 << 16
 )
 
 type LZSSCodec struct{}
 
 func balanceBytes(lookBack int, runLength int) []byte {
-	a := byte((lookBack >> 4) & 0xFF)                        // keep the 8 MSb of the lookback in one byte
-	b := byte(((lookBack << 4) & 0xF0) | (runLength & 0x0F)) // and 4 LSb of lookback + 4 bit length in other byte
+	a := byte((lookBack >> 4) & 0xFF)                                        // keep the 8 MSb of the lookback in one byte
+	b := byte(((lookBack << 4) & 0xF0) | ((runLength - minMatchLen) & 0x0F)) // and 4 LSb of lookback + 4 bit length in other byte
 	return []byte{a, b}
 }
 
 func splitBytes(byte1 byte, byte2 byte) (int, int) {
 	lookback := (int(byte1) << 4) | int((byte2>>4)&0x0F)
-	runLen := int(byte2&0x0F) + minMatchLen
-	return lookback, runLen
+	runLength := int(byte2&0x0F) + minMatchLen
+	return lookback, runLength
 }
 
-func findMatches(backward []byte, forward []byte) (byte, []byte) {
-	var (
-		matched     bool = true // whether or not the we are currently matched
-		matchCount  int  = 0    // length of current match
-		maxMatch    int  = 0    // length of longest match so far
-		maxMatchIdx int  = 0    // index of longest match so far
-	)
-	for i := range len(backward) - len(forward) - minMatchLen { // stop when i == start of forward
-		matchCount = 0                               // reset match count for each element in lookback window
-		matched = backward[i] == forward[matchCount] // grab the first potential match
-		for matched {                                // while we are matched
-			matchCount++ // keep counting up how long the match is
-			if i+matchCount >= len(backward) || matchCount >= len(forward) {
-				break // break out if we are about to exceed the length of anything being compared
-			}
-			matched = backward[i+matchCount] == forward[matchCount] // are we still matched?
-		}
-		if matchCount > maxMatch {
-			maxMatch = matchCount // keep the longest match
-			maxMatchIdx = i       // store the index of the longest match so far
-		}
-		if matchCount == maxMatchLen {
-			break // we found the longest possible match, break
-		}
-		i++ // go to the next element in the lookback window
+func hashBytes(bytes []byte) int {
+	hash := 0
+	for i := range len(bytes) {
+		hash = (hash << 8) | int(bytes[i])
 	}
-	if maxMatch > minMatchLen { // make sure the longest match is even worth encoding
-		return byte(1), balanceBytes(len(backward)-maxMatchIdx, maxMatch-minMatchLen)
-	}
-	return byte(0), []byte{forward[0]} // otherwise return the literal
+	return hash & (hashSize - 1)
 }
 
 func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
-	if len(src) == 0 {
-		return []byte{}, nil
-	}
-	// encodes src using a flagBit - lookback - run technique
-	// ex: Mellow yellow fellow says hello! (length 32)
-	// a byte where each bit representing 0 - byte literal or 1 - lookback-run pair
-	// [00000000] M  e l l o w _ y
-	// [10100000] 7  6 f 7 6 s a y s _
-	// [01000000] h 12 4 !
-	// result: (0x00)Mellow y(0xA0)76f76says (0x40)h(12)4 (length 24)
-	//
-	// lookback - run values are spread over two bytes
-	// first 12 bits are lookback, last 4 bits are run length + 3 (since 3 is min length)
 	var (
-		srcIdx    int    = 0                             // where you are in the input
-		srcLen    int    = len(src)                      // length of the input
-		flagByte  byte   = 0                             // value of the flag byte
-		flagIdx   int    = 7                             // index of flag byte to be edited
-		output    []byte = make([]byte, 0, len(src)*9/8) // output byte slice
-		curStream []byte = make([]byte, 0, 16)           // current stream of output bytes corresponding to the flag byte
-		flagBit   byte   = 0                             // flag bit value
-		bytes     []byte = make([]byte, 0, 2)            // literal byte or lookback-run byte pair
-		lookBack  int    = 0                             // lookback value (changes at start of block
-		lookAhead int    = 0                             // lookAhead value (changes at end of block)
+		head         [hashSize]int                                        // most recent match of hashes 3-byte sequence
+		prev         [maxLookBack + 1]int                                 // previous matches
+		output       []byte               = make([]byte, 0, len(src)*9/8) // output byte slice
+		srcIdx       int                  = 0                             // where you are in the input
+		srcLen       int                  = len(src)                      // length of the input
+		matchStream  []byte               = make([]byte, 0, 16)           // current matching values corresponding to flag bits
+		flagIdx      int                                                  // where you are in processing flags
+		flagByte     byte                                                 // the flag byte
+		hash         int                                                  // hash of the next minMatchLen bytes
+		curMatchIdx  int                                                  // where the current match is in the input
+		curMatchLen  int                                                  // how long it is
+		bestMatchLen int                                                  // best match length per 3 byte hash
+		bestLookBack int                                                  // lookback for that best match
+		iterations   int                                                  // number of iterations of checking matches
+		lookBackIdx  int                                                  // index of the lookback window start
 	)
-	for srcIdx < srcLen {
-		lookBack = max(srcIdx-maxLookBack, 0)                                     // get valid lookback value
-		lookAhead = min(srcIdx+maxMatchLen, srcLen)                               // get valid lookahead value
-		flagBit, bytes = findMatches(src[lookBack:srcIdx], src[srcIdx:lookAhead]) // get flag bit and literal / lookback-run bytes
-		flagByte |= (flagBit << flagIdx) & (1 << flagIdx)                         // add flagbit to the flagByte
-		curStream = append(curStream, bytes[0])                                   // add first byte to stream (literal or lookback)
-		if flagBit > 0 {                                                          // if it was a lookback-run byte pair
-			curStream = append(curStream, bytes[1])    // add the run length bytes too
-			srcIdx += int(bytes[1]&0x0F) + minMatchLen // jump ahead to the end of the current run
-		} else {
-			srcIdx++ // move to the next byte
-		}
-		if flagIdx == 0 { // if you are at the end of the current flag byte
-			output = append(output, flagByte)     // append the flag byte to the output
-			output = append(output, curStream...) // append the current stream of encoded data to the output
-			curStream = curStream[:0]             // remake the current stream
-			flagIdx = 7                           // reset the flag index
-			flagByte = 0
-		} else {
-			flagIdx-- // decrement the flag index
-		}
+	for i := range len(head) {
+		head[i] = -1 // set the head hash-match index mapping array to -1
 	}
-	output = append(output, flagByte)     // append the flag byte to the output
-	output = append(output, curStream...) // append the current stream of encoded data to the output
+	for i := range len(prev) {
+		prev[i] = -1 // set the list of previous matches to -1
+	}
+	for srcIdx < srcLen {
+		flagIdx = 7                   // start at the msb of the flag
+		flagByte = 0                  // reset the flag
+		matchStream = matchStream[:0] // wipe the match stream
+		for flagIdx >= 0 {            // loop through the flag bits
+			if srcIdx >= srcLen {
+				break // dip if you run out of source before finishing the flag byte
+			}
+			bestMatchLen = 0                  // reset you best match
+			bestLookBack = -1                 // and best look back
+			if srcIdx+minMatchLen <= srcLen { // don't go out of bounds
+				iterations = 0                                     // reset your iterations of match checks
+				hash = hashBytes(src[srcIdx : srcIdx+minMatchLen]) // get the hash of the current three consecutive bytes
+				curMatchIdx = head[hash]                           // get the index of the last match of that hash
+				lookBackIdx = max(0, srcIdx-maxLookBack)           // determine the lookback value
+				for curMatchIdx != -1 &&                           // while there is a match
+					curMatchIdx >= lookBackIdx && // and the match is within the window
+					iterations < maxMatchIter { // and you haven't exceeded your max iterations
+					curMatchLen = 0                  // reset the length of the match
+					for curMatchLen < maxMatchLen && // while you haven't achieved the longest match possible
+						srcIdx+curMatchLen < srcLen && // your front match isn't extending past the source data
+						curMatchIdx+curMatchLen < srcLen && // your tail match isn't extending past the source data (bug)
+						src[curMatchIdx+curMatchLen] == src[srcIdx+curMatchLen] { // and the match continues
+						curMatchLen++ // keep counting
+					}
+					if curMatchLen >= minMatchLen && curMatchLen > bestMatchLen { // save it off it is the best match yet
+						bestMatchLen = curMatchLen
+						bestLookBack = srcIdx - curMatchIdx
+						if bestMatchLen == maxMatchLen {
+							break
+						}
+					}
+					curMatchIdx = prev[curMatchIdx%(maxLookBack+1)] // grab the next match if it is still iterating
+					iterations++                                    // count it
+				}
+			}
+			start := srcIdx                  // where doesn the match start
+			if bestMatchLen >= minMatchLen { // for matches
+				flagByte |= (1 << flagIdx)                                                     // add a 1 bit to the flag
+				matchStream = append(matchStream, balanceBytes(bestLookBack, bestMatchLen)...) // add the look back + length bytes
+				srcIdx += bestMatchLen                                                         // increment where you are in the source data
+			} else { // for literals
+				matchStream = append(matchStream, src[srcIdx]) // add the literal
+				srcIdx++                                       // increment where you are in the source data
+			}
+			end := srcIdx                  // keep track of where the match ended
+			for k := start; k < end; k++ { // loop through all the 3 byte chunks from the beginning of the match to the end
+				if minMatchLen+k <= srcLen { // don't read past the end
+					hash = hashBytes(src[k : k+minMatchLen]) // get the hash of the next bytes
+					prev[k%(maxLookBack+1)] = head[hash]     // update the old matches
+					head[hash] = k                           // update the newest most recent match
+				}
+			}
+			flagIdx--
+		}
+		output = append(output, flagByte)
+		output = append(output, matchStream...)
+	}
 	return output, nil
 }
 
@@ -110,11 +120,11 @@ func (LZSSCodec) DecodeBlock(src []byte) ([]byte, error) {
 		return []byte{}, nil
 	}
 	var (
+		srcLen   int  = len(src) // length of the input
+		srcIdx   int             // where you are in the input
 		flagByte byte            // current flag byte
 		flagBit  byte            // current flag bit
 		flagIdx  int             // current flag bit index
-		srcLen   int  = len(src) // length of the input
-		srcIdx   int             // where you are in the input
 		outLen   int             // length of decoded data
 		lookback int             // how far to looking back
 		runLen   int             // how long a run is
@@ -128,7 +138,7 @@ func (LZSSCodec) DecodeBlock(src []byte) ([]byte, error) {
 			if flagBit == 0 {                      // if it is a literal
 				outLen++ // increase the output length by one byte
 				srcIdx++ // move forward as you scan through the source
-			} else {
+			} else if srcIdx+1 < srcLen {
 				outLen += int(src[srcIdx+1]&0x0F) + minMatchLen // increase the output by the length of the run
 				srcIdx += 2                                     // move forward as you scan through the source
 			}
