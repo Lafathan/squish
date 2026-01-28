@@ -21,7 +21,7 @@ type RLTolerance struct {
 }
 
 func equalSlice(slice1 []byte, slice2 []byte, tol []float64) bool {
-	// elemental slice comparison
+	// element-wise slice comparison
 	if len(slice1) != len(slice2) {
 		return false
 	}

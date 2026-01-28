@@ -10,16 +10,16 @@ const (
 
 type LZSSCodec struct{}
 
-func balanceBytes(lookBack int, runLength int) []byte {
-	a := byte((lookBack >> 4) & 0xFF)                                        // keep the 8 MSb of the lookback in one byte
-	b := byte(((lookBack << 4) & 0xF0) | ((runLength - minMatchLen) & 0x0F)) // and 4 LSb of lookback + 4 bit length in other byte
+func balanceBytes(lookBack int, runLen int) []byte {
+	a := byte((lookBack >> 4) & 0xFF)                                     // keep the 8 MSb of the lookback in one byte
+	b := byte(((lookBack << 4) & 0xF0) | ((runLen - minMatchLen) & 0x0F)) // and 4 LSb of lookback + 4 bit length in other byte
 	return []byte{a, b}
 }
 
-func splitBytes(byte1 byte, byte2 byte) (int, int) {
-	lookback := (int(byte1) << 4) | int((byte2>>4)&0x0F)
-	runLength := int(byte2&0x0F) + minMatchLen
-	return lookback, runLength
+func splitBytes(a byte, b byte) (int, int) {
+	lookback := (int(a) << 4) | int((b>>4)&0x0F) // lookback is first byte + 4 msb of second bit
+	runLen := int(b&0x0F) + minMatchLen          // length is lsb bits of second byte + minimum match length
+	return lookback, runLen
 }
 
 func hashBytes(bytes []byte) int {
@@ -69,17 +69,17 @@ func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
 				hash = hashBytes(src[srcIdx : srcIdx+minMatchLen]) // get the hash of the current three consecutive bytes
 				curMatchIdx = head[hash]                           // get the index of the last match of that hash
 				lookBackIdx = max(0, srcIdx-maxLookBack)           // determine the lookback value
-				for curMatchIdx != -1 &&                           // while there is a match
+				for curMatchIdx != -1 &&                           // while there is a match within the window
 					curMatchIdx >= lookBackIdx && // and the match is within the window
 					iterations < maxMatchIter { // and you haven't exceeded your max iterations
 					curMatchLen = 0                  // reset the length of the match
 					for curMatchLen < maxMatchLen && // while you haven't achieved the longest match possible
 						srcIdx+curMatchLen < srcLen && // your front match isn't extending past the source data
-						curMatchIdx+curMatchLen < srcLen && // your tail match isn't extending past the source data (bug)
+						curMatchIdx < srcIdx && // you aren't getting ahead of yourself... literally
 						src[curMatchIdx+curMatchLen] == src[srcIdx+curMatchLen] { // and the match continues
 						curMatchLen++ // keep counting
 					}
-					if curMatchLen >= minMatchLen && curMatchLen > bestMatchLen { // save it off it is the best match yet
+					if curMatchLen >= minMatchLen && curMatchLen > bestMatchLen { // save it off if is the best match yet
 						bestMatchLen = curMatchLen
 						bestLookBack = srcIdx - curMatchIdx
 						if bestMatchLen == maxMatchLen {
@@ -90,7 +90,7 @@ func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
 					iterations++                                    // count it
 				}
 			}
-			start := srcIdx                  // where doesn the match start
+			start := srcIdx                  // where does the match start
 			if bestMatchLen >= minMatchLen { // for matches
 				flagByte |= (1 << flagIdx)                                                     // add a 1 bit to the flag
 				matchStream = append(matchStream, balanceBytes(bestLookBack, bestMatchLen)...) // add the look back + length bytes

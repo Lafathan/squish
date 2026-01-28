@@ -208,7 +208,7 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, error) {
 			if err != nil {
 				return []byte{}, fmt.Errorf("error while writing huffman encoded bits: %w", err)
 			}
-			remainingBits -= bitsToWrite // cound down the bits to be written
+			remainingBits -= bitsToWrite // count down the bits to be written
 		}
 	}
 	pad, err := bw.Flush() // flush it and report back the number of pad bits
