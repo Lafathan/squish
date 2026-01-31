@@ -40,7 +40,7 @@ func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize int, check
 		if checksumMode&frame.UncompressedChecksum > 0 {
 			checksum = uint64(crc32.ChecksumIEEE(data))
 		}
-		autoCodecIDs := make([]uint8, 1, codec.AutoDepth)
+		autoCodecIDs := make([]uint8, 0, codec.AutoDepth)
 		for _, codecID := range codecIDs {
 			currentCodec, ok := codec.CodecMap[codecID]
 			if !ok {
@@ -51,7 +51,7 @@ func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize int, check
 				return sqerr.CodedError(err, sqerr.Internal, fmt.Sprintf("failed to encode block of data with codec %d", codecID))
 			}
 			if codecID == codec.AUTO { // grab the codecs used if in auto mode
-				autoCodecIDs = append(autoCodecIDs, currentCodec.(codec.AUTOCodec).CodecIDs...)
+				autoCodecIDs = append(autoCodecIDs, currentCodec.(*codec.AUTOCodec).CodecIDs...)
 				break
 			}
 		}
@@ -60,15 +60,17 @@ func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize int, check
 			checksum += uint64(crc32.ChecksumIEEE(data))
 		}
 		bType := frame.DefaultCodec
+		bCodecsID := codecIDs
 		if codecIDs[0] == codec.AUTO {
-			bType = frame.BlockCodec
+			bType = frame.BlockCodec // set the block type if in AUTO mode
+			bCodecsID = autoCodecIDs // set the codec IDs if in AUTO mode
 		}
 		block := frame.Block{ // build the block
 			BlockType: uint8(bType),
 			USize:     uint64(n),
 			CSize:     uint64(len(data)),
 			Checksum:  checksum,
-			Codec:     autoCodecIDs,
+			Codec:     bCodecsID,
 		}
 		err = fw.WriteBlock(block, bytes.NewReader(data)) // write the block
 		if err != nil {

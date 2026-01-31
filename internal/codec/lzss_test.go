@@ -41,8 +41,8 @@ func TestLZSSEmptyMessage(t *testing.T) {
 }
 
 func TestLZSSLossless(t *testing.T) {
-	hc := LZSSCodec{}
-	if !hc.IsLossless() {
+	lc := LZSSCodec{}
+	if !lc.IsLossless() {
 		t.Fatalf("LZSS is lossless, but returned lossy")
 	}
 }

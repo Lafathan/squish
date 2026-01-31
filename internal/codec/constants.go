@@ -29,7 +29,7 @@ var CodecMap = map[uint8]Codec{
 	LRLE4:   RLECodec{byteLength: 4, lossless: false},
 	HUFFMAN: HUFFMANCodec{},
 	LZSS:    LZSSCodec{},
-	AUTO:    AUTOCodec{},
+	AUTO:    &AUTOCodec{},
 }
 
 // codec string to codec ID map
