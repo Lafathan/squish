@@ -137,15 +137,15 @@ func (RC RLECodec) DecodeBlock(src []byte) ([]byte, error) {
 		runLen = int(src[srcIdx]) // count how many bytes will be added
 		srcIdx++                  // jump to the actual bytes to repeat
 		if rem := srcLen - srcIdx; RC.byteLength > rem {
-			for _, elem := range src[srcIdx:] {
-				decBytes[outIdx] = elem // if a short chunk is remaining, add the bytes to the output
+			for i := range len(src) - srcIdx {
+				decBytes[outIdx] = src[srcIdx+i] // if a short chunk is remaining, add the bytes to the output
 				outIdx++
 			}
 			break
 		}
 		for range runLen { // for every repetition
-			for _, elem := range src[srcIdx : srcIdx+RC.byteLength] {
-				decBytes[outIdx] = elem // loop through and add the bytes repeated
+			for i := range srcIdx + RC.byteLength - srcIdx {
+				decBytes[outIdx] = src[srcIdx+i] // loop through and add the bytes repeated
 				outIdx++
 			}
 		}
