@@ -23,7 +23,7 @@ func runEnc(args []string) sqerr.Code {
 		outPath    = flagSet.String("o", "", "output file path (default stdout)")
 		outPath2   = flagSet.String("output", "", "output file path (default stdout)")
 		codecPipe  = flagSet.String("codec", "DEFLATE", "codec pipeline, e.g. RLE-HUFFMAN")
-		blockSize  = flagSet.String("blocksize", "25KiB", "block size (e.g. 256KiB, 1MiB)")
+		blockSize  = flagSet.String("blocksize", "128KiB", "block size (e.g. 256KiB, 1MiB)")
 		checksum   = flagSet.String("checksum", "", "checksum mode: u|c|uc")
 		listCodecs = flagSet.Bool("list-codecs", false, "list supported codecs and exit")
 	)

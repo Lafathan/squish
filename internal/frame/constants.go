@@ -1,7 +1,7 @@
 package frame
 
 const MagicKey = "SQZ"
-const MaxBlockSize = 1<<16 - 1
+const MaxBlockSize = 1<<24 - 1
 
 // Block types
 const (
