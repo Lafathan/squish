@@ -179,7 +179,7 @@ func deserializeHuffmanLengths(br io.Reader) (*[256]uint8, error) {
 
 func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, error) {
 	if len(src) == 0 {
-		return []byte{}, nil
+		return src, nil
 	}
 	var (
 		outBuffer     = new(bytes.Buffer)             // create a new buffer to write to
@@ -215,7 +215,7 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, error) {
 
 func (HUFFMANCodec) DecodeBlock(src []byte) ([]byte, error) {
 	if len(src) == 0 {
-		return []byte{}, nil
+		return src, nil
 	}
 	br := bytes.NewBuffer(src)    // create a byte buffer for reading bytes
 	padBits, err := br.ReadByte() // read in the padded bits byte

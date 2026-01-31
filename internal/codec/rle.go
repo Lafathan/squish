@@ -65,26 +65,25 @@ func (t *RLTolerance) updateTolerance(a []byte) {
 }
 
 func (RC RLECodec) EncodeBlock(src []byte) ([]byte, error) {
+	if len(src) == 0 {
+		return src, nil
+	}
 	var (
 		runLen    uint8        = 1                           // current length of the run
 		runBytes  []byte       = nil                         // current bytes being repeated
 		srcIdx    int          = 0                           // index as you traverse the source
 		srcBytes  []byte       = nil                         // current bytes from the source
-		srcLen    int          = len(src)                    // length of input
 		tolerance *RLTolerance = newTolerance(RC.byteLength) // noise and tolerance calculations
 	)
-	if srcLen == 0 {
-		return []byte{}, nil
-	}
-	if srcLen < RC.byteLength {
+	if len(src) < RC.byteLength {
 		encBytes := []byte{1}               // return a run length of 1 of the original source
 		encBytes = append(encBytes, src...) // if the source is shorter than the byte length
 		return encBytes, nil
 	}
 	runLen = 1
-	encBytes := make([]byte, 0, (srcLen/RC.byteLength+1)*(RC.byteLength+1))
+	encBytes := make([]byte, 0, (len(src)/RC.byteLength+1)*(RC.byteLength+1))
 	runBytes = src[:RC.byteLength]
-	for srcIdx = RC.byteLength; srcIdx+RC.byteLength <= srcLen; srcIdx += RC.byteLength {
+	for srcIdx = RC.byteLength; srcIdx+RC.byteLength <= len(src); srcIdx += RC.byteLength {
 		srcBytes = src[srcIdx : srcIdx+RC.byteLength] // get next set of bytes from the source
 		if !RC.lossless {
 			tolerance.updateTolerance(srcBytes)
@@ -100,31 +99,30 @@ func (RC RLECodec) EncodeBlock(src []byte) ([]byte, error) {
 	}
 	encBytes = append(encBytes, runLen) // flush the final run
 	encBytes = append(encBytes, runBytes...)
-	if rem := srcLen % RC.byteLength; rem != 0 { // if there are leftover bytes (sub byteLength)
-		encBytes = append(encBytes, 1)                   // add the run length
-		encBytes = append(encBytes, src[srcLen-rem:]...) // add the run bytes
+	if rem := len(src) % RC.byteLength; rem != 0 { // if there are leftover bytes (sub byteLength)
+		encBytes = append(encBytes, 1)                     // add the run length
+		encBytes = append(encBytes, src[len(src)-rem:]...) // add the run bytes
 	}
 	return encBytes, nil
 }
 
 func (RC RLECodec) DecodeBlock(src []byte) ([]byte, error) {
-	var (
-		outLen int = 0        // length of the output
-		outIdx int = 0        // how many bytes have been decoded
-		srcIdx int = 0        // index as you traverse the source
-		srcLen int = len(src) // how long is the input
-		runLen int = 0        // how long is the current run
-	)
-	if srcLen == 0 {
+	if len(src) == 0 {
 		return []byte{}, nil
 	}
-	if srcLen <= RC.byteLength {
+	var (
+		outLen int = 0 // length of the output
+		outIdx int = 0 // how many bytes have been decoded
+		srcIdx int = 0 // index as you traverse the source
+		runLen int = 0 // how long is the current run
+	)
+	if len(src) <= RC.byteLength {
 		return src[1:], nil
 	}
-	for srcIdx < srcLen { // while you are not at the end of the source
+	for srcIdx < len(src) { // while you are not at the end of the source
 		runLen = int(src[srcIdx]) // count how many bytes will be added
 		srcIdx++                  // jump to the actual bytes to repeat
-		if rem := srcLen - srcIdx; RC.byteLength > rem {
+		if rem := len(src) - srcIdx; RC.byteLength > rem {
 			outLen += rem // if a short chunk is remaining, add it to the output length
 			break
 		}
@@ -133,10 +131,10 @@ func (RC RLECodec) DecodeBlock(src []byte) ([]byte, error) {
 	}
 	decBytes := make([]byte, outLen) // make the array you need for output
 	srcIdx = 0                       // keep track of where you are in the input
-	for srcIdx < srcLen {
+	for srcIdx < len(src) {
 		runLen = int(src[srcIdx]) // count how many bytes will be added
 		srcIdx++                  // jump to the actual bytes to repeat
-		if rem := srcLen - srcIdx; RC.byteLength > rem {
+		if rem := len(src) - srcIdx; RC.byteLength > rem {
 			for i := range len(src) - srcIdx {
 				decBytes[outIdx] = src[srcIdx+i] // if a short chunk is remaining, add the bytes to the output
 				outIdx++

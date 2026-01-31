@@ -91,6 +91,9 @@ func runEnc(args []string) sqerr.Code {
 		}
 		codecList = append(codecList, codecID)
 	}
+	if slices.Contains(codecList, codec.AUTO) {
+		codecList = []uint8{codec.AUTO}
+	}
 
 	// parse output file
 	output := *outPath

@@ -36,7 +36,6 @@ func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
 		prev         [maxLookBack + 1]int                                 // previous matches
 		output       []byte               = make([]byte, 0, len(src)*9/8) // output byte slice
 		srcIdx       int                  = 0                             // where you are in the input
-		srcLen       int                  = len(src)                      // length of the input
 		matchStream  []byte               = make([]byte, 0, 16)           // current matching values corresponding to flag bits
 		flagIdx      int                                                  // where you are in processing flags
 		flagByte     byte                                                 // the flag byte
@@ -54,17 +53,17 @@ func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
 	for i := range len(prev) {
 		prev[i] = -1 // set the list of previous matches to -1
 	}
-	for srcIdx < srcLen {
+	for srcIdx < len(src) {
 		flagIdx = 7                   // start at the msb of the flag
 		flagByte = 0                  // reset the flag
 		matchStream = matchStream[:0] // wipe the match stream
 		for flagIdx >= 0 {            // loop through the flag bits
-			if srcIdx >= srcLen {
+			if srcIdx >= len(src) {
 				break // dip if you run out of source before finishing the flag byte
 			}
-			bestMatchLen = 0                  // reset you best match
-			bestLookBack = -1                 // and best look back
-			if srcIdx+minMatchLen <= srcLen { // don't go out of bounds
+			bestMatchLen = 0                    // reset you best match
+			bestLookBack = -1                   // and best look back
+			if srcIdx+minMatchLen <= len(src) { // don't go out of bounds
 				iterations = 0                                     // reset your iterations of match checks
 				hash = hashBytes(src[srcIdx : srcIdx+minMatchLen]) // get the hash of the current three consecutive bytes
 				curMatchIdx = head[hash]                           // get the index of the last match of that hash
@@ -74,7 +73,7 @@ func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
 					iterations < maxMatchIter { // and you haven't exceeded your max iterations
 					curMatchLen = 0                  // reset the length of the match
 					for curMatchLen < maxMatchLen && // while you haven't achieved the longest match possible
-						srcIdx+curMatchLen < srcLen && // your front match isn't extending past the source data
+						srcIdx+curMatchLen < len(src) && // your front match isn't extending past the source data
 						curMatchIdx < srcIdx && // you aren't getting ahead of yourself... literally
 						src[curMatchIdx+curMatchLen] == src[srcIdx+curMatchLen] { // and the match continues
 						curMatchLen++ // keep counting
@@ -101,7 +100,7 @@ func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
 			}
 			end := srcIdx                  // keep track of where the match ended
 			for k := start; k < end; k++ { // loop through all the 3 byte chunks from the beginning of the match to the end
-				if minMatchLen+k <= srcLen { // don't read past the end
+				if minMatchLen+k <= len(src) { // don't read past the end
 					hash = hashBytes(src[k : k+minMatchLen]) // get the hash of the next bytes
 					prev[k%(maxLookBack+1)] = head[hash]     // update the old matches
 					head[hash] = k                           // update the newest most recent match
@@ -120,17 +119,16 @@ func (LZSSCodec) DecodeBlock(src []byte) ([]byte, error) {
 		return []byte{}, nil
 	}
 	var (
-		srcLen   int  = len(src) // length of the input
-		srcIdx   int             // where you are in the input
-		flagByte byte            // current flag byte
-		flagBit  byte            // current flag bit
-		flagIdx  int             // current flag bit index
-		outLen   int             // length of decoded data
-		lookback int             // how far to looking back
-		runLen   int             // how long a run is
+		srcIdx   int  // where you are in the input
+		flagByte byte // current flag byte
+		flagBit  byte // current flag bit
+		flagIdx  int  // current flag bit index
+		outLen   int  // length of decoded data
+		lookback int  // how far to looking back
+		runLen   int  // how long a run is
 
 	)
-	for srcIdx < srcLen { // scan through the input to count how long the output will be
+	for srcIdx < len(src) { // scan through the input to count how long the output will be
 		flagByte = src[srcIdx]                     // get the current flag byte
 		srcIdx++                                   // move past the flag byte
 		for flagIdx = 7; flagIdx >= 0; flagIdx-- { // loop through the flag bits
@@ -138,22 +136,22 @@ func (LZSSCodec) DecodeBlock(src []byte) ([]byte, error) {
 			if flagBit == 0 {                      // if it is a literal
 				outLen++ // increase the output length by one byte
 				srcIdx++ // move forward as you scan through the source
-			} else if srcIdx+1 < srcLen {
+			} else if srcIdx+1 < len(src) {
 				outLen += int(src[srcIdx+1]&0x0F) + minMatchLen // increase the output by the length of the run
 				srcIdx += 2                                     // move forward as you scan through the source
 			}
-			if srcIdx > srcLen {
+			if srcIdx > len(src) {
 				break
 			}
 		}
 	}
 	srcIdx = 0
 	output := make([]byte, 0, outLen) // make the output byte slice
-	for srcIdx < srcLen {             // scan through the input to count how long the output will be
+	for srcIdx < len(src) {           // scan through the input to count how long the output will be
 		flagByte = src[srcIdx]                     // get the current flag byte
 		srcIdx++                                   // move forward in the input
 		for flagIdx = 7; flagIdx >= 0; flagIdx-- { // loop through the flag bits
-			if srcIdx >= srcLen {
+			if srcIdx >= len(src) {
 				break
 			}
 			flagBit = (flagByte >> flagIdx) & 0x01 // grab the bit

@@ -13,6 +13,7 @@ const (
 	LRLE4
 	HUFFMAN
 	LZSS
+	AUTO
 )
 
 // codec key map
@@ -28,6 +29,7 @@ var CodecMap = map[uint8]Codec{
 	LRLE4:   RLECodec{byteLength: 4, lossless: false},
 	HUFFMAN: HUFFMANCodec{},
 	LZSS:    LZSSCodec{},
+	AUTO:    AUTOCodec{},
 }
 
 // codec string to codec ID map
@@ -43,6 +45,7 @@ var StringToCodecIDMap = map[string]uint8{
 	"LRLE4":   LRLE4,
 	"HUFFMAN": HUFFMAN,
 	"LZSS":    LZSS,
+	"AUTO":    AUTO,
 }
 
 // codec aliases
