@@ -16,8 +16,8 @@ Automagic encoding is here!
 - Decreased size of executable by ~1/3
 
 ### Fixed
-- 20% less memmory usage when decoding Huffman
-- Less memmory usage for Run Length Encoding as well
+- 20% less memory usage when decoding Huffman
+- Less memory usage for Run Length Encoding as well
 - Fixed not recognizing non-upper-case `deflate` codec.
     
 ## [0.1.1] - 2026-01-25
