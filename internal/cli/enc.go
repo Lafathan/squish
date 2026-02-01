@@ -70,10 +70,7 @@ func runEnc(args []string) sqerr.Code {
 	}
 
 	// parse codec pipeline
-	if *codecPipe == "" {
-		fmt.Fprintf(os.Stdout, "enc: missing required -codec")
-		return sqerr.Usage
-	}
+	*codecPipe = strings.ToUpper(*codecPipe)
 	for alias, expandedCodecs := range codec.CodecAliases {
 		*codecPipe = strings.ReplaceAll(*codecPipe, alias, expandedCodecs)
 	}
