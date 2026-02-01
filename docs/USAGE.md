@@ -140,6 +140,7 @@ Example:
 - HUFFMAN - Entropy coding: assigns shorter bit codes to more frequent symbols and longer codes to rare ones. Great when byte values have a skewed distribution (text-like data, structured binaries, outputs of other transforms). Typically helps more as a second-stage codec.
 - LZSS - Dictionary-based (LZ77-family): encodes repeated sequences by referencing earlier occurrences with (offset, length) pairs, falling back to literals when no good match exists. Strong general-purpose compressor for data with repeated substrings/patterns (text, logs, structured formats).
 - DEFLATE - Convenience alias for the LZSS-HUFFMAN pipeline.
+- AUTO - Allow squish to iteratively apply a host of codecs to a subset of your data to determine the optimal pipeline per block.
 
 #### Decode order
 Compression applies left-to-right; decompression reverses that.
