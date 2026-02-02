@@ -229,7 +229,7 @@ func (HUFFMANCodec) DecodeBlock(src []byte) ([]byte, error) {
 	d := getHuffmanDictFromLengths(l)  // build the canonical huffman dictionary from the lengths
 	t := getHuffmanTreeFromDict(d)     // build the Huffman tree
 	inBuffer := bitio.NewBitReader(br) // create a bitreader and traverse the tree with bits
-	outBuffer := make([]byte, 0, 2*len(src))
+	outBuffer := make([]byte, 0, 4*len(src))
 	var (
 		padBuffer uint64
 		newBit    uint64
