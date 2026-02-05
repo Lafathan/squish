@@ -142,62 +142,81 @@ func (RC RLECodec) EncodeBlock(src []byte) ([]byte, error) {
 
 func (RC RLECodec) DecodeBlock(src []byte) ([]byte, error) {
 	if len(src) == 0 {
-		return []byte{}, nil
+		return src, nil
 	}
 	var (
-		flagByte byte     // current flag byte
-		outLen   int  = 0 // length of the output
-		outIdx   int  = 0 // how many bytes have been decoded
-		srcIdx   int  = 0 // index as you traverse the source
-		runLen   int  = 0 // how long is the current run
+		srcIdx     = 0     // where you are in the source
+		flagBit    = 7     // current bit index in the flag byte
+		flagByte   byte    // current flag byte
+		groupBytes []byte  // current decoded bytes associated with the current flag
+		runLen     = 1     // current run length
+		runBytes   []byte  // current bytes to be repeated
+		outLength  = 0     // first pass variable for allocating for decoding
+		flush      = false // whether or not you are at the end
 	)
-	if len(src) <= RC.byteLength {
-		return src[1:], nil
-	}
-	for srcIdx < len(src) { // while you are not at the end of the source
-		flagByte = src[srcIdx]
-		srcIdx++
-		for flagBit := 7; flagBit >= 0; flagBit-- {
-			if flagByte&(1<<flagBit) > 0 {
-				runLen = int(src[srcIdx])
-				srcIdx++
-			} else {
-				runLen = 1
-			}
-			if rem := len(src) - srcIdx; RC.byteLength > rem {
-				outLen += rem // if a short chunk is remaining, add it to the output length
-				srcIdx = len(src)
-				break
-			}
-			outLen += runLen * RC.byteLength // increase the output
-			srcIdx += RC.byteLength          // jump to the next run length value
-		}
-	}
-	decBytes := make([]byte, 0, outLen) // make the array you need for output
-	srcIdx = 0                          // keep track of where you are in the input
 	for srcIdx < len(src) {
-		flagByte = src[srcIdx]
-		srcIdx++
-		for flagBit := 7; flagBit >= 0; flagBit-- {
-			if flagByte&(1<<flagBit) > 0 {
-				runLen = int(src[srcIdx])
-				srcIdx++
-			} else {
-				runLen = 1
-			}
-			if rem := len(src) - srcIdx; RC.byteLength > rem {
-				decBytes = append(decBytes, src[srcIdx:]...)
-				srcIdx = len(src)
+		if flagBit == 7 { // if you just reset the flag bit
+			flagByte = src[srcIdx] // get a new flag byte
+			srcIdx++               // move forward
+		}
+		if flagByte&(1<<flagBit) > 0 { // if you come across a run
+			runLen = int(src[srcIdx]) // grab the run length
+			srcIdx++
+		} else {
+			runLen = 1 // otherwise it is just a single literal
+		}
+		runBytes = src[srcIdx:min((srcIdx+RC.byteLength), len(src))] // get the bytes repeated
+		outLength += runLen * len(runBytes)
+		srcIdx += len(runBytes) // increment past the literal
+		if len(runBytes) < RC.byteLength || srcIdx >= len(src) {
+			flush = true // flush if literal was not full length (RC.byteLength)
+		}
+		if flagBit == 0 || flush {
+			outLength += 1
+			if flush {
 				break
 			}
-			for range runLen { // for every repetition
-				decBytes = append(decBytes, src[srcIdx:srcIdx+RC.byteLength]...)
-				outIdx += RC.byteLength
-			}
-			srcIdx += RC.byteLength // jump to the next run-bytes pair
+			flagBit = 7
+		} else {
+			flagBit--
 		}
 	}
-	return decBytes, nil
+	outBytes := make([]byte, 0, outLength)
+	srcIdx = 0
+	flagBit = 7
+	flush = false
+	for srcIdx < len(src) {
+		if flagBit == 7 { // if you just reset the flag bit
+			flagByte = src[srcIdx] // get a new flag byte
+			srcIdx++               // move forward
+		}
+		if flagByte&(1<<flagBit) > 0 { // if you come across a run
+			runLen = int(src[srcIdx]) // grab the run length
+			srcIdx++
+		} else {
+			runLen = 1 // otherwise it is just a single literal
+		}
+		runBytes = src[srcIdx:min((srcIdx+RC.byteLength), len(src))] // get the bytes repeated
+		for range runLen {
+			groupBytes = append(groupBytes, runBytes...)
+		}
+		srcIdx += len(runBytes) // increment past the literal
+		if len(runBytes) < RC.byteLength || srcIdx >= len(src) {
+			flush = true // flush if literal was not full length (RC.byteLength)
+		}
+		if flagBit == 0 || flush {
+			outBytes = append(outBytes, flagByte)
+			outBytes = append(outBytes, groupBytes...)
+			if flush {
+				break
+			}
+			flagBit = 7
+			groupBytes = groupBytes[:0]
+		} else {
+			flagBit--
+		}
+	}
+	return outBytes, nil
 }
 
 func (RC RLECodec) IsLossless() bool {
