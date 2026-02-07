@@ -2,11 +2,12 @@ package codec
 
 const (
 	maxRunLength uint8   = 255
-	tolDecay     float64 = 1.0 / 32.0
-	tolAttack    float64 = 2.0
-	tolMin       float64 = 0.0
-	tolMax       float64 = 24.0
-	tolBase      float64 = 1.0
+	tolAlpha     float64 = 0.15 // tolerance sigma decay
+	tolMin       float64 = 2.0  // residual that will always result in conforming to anchor
+	tolMax       float64 = 6.0  // residual that will always result in a new anchor
+	tolK         float64 = 1.5  // variance to tolerance factor
+	tolBand      uint8   = 1    // wiggle allowance when considering new anchor candidate
+	tolHang      uint8   = 3    // required repetitions for candidate to become new anchor
 )
 
 type RLECodec struct {
@@ -15,9 +16,11 @@ type RLECodec struct {
 }
 
 type RLTolerance struct {
+	anchor    []byte
+	sigma     []float64
 	tolerance []float64
-	noise     []float64
-	prevBytes []byte
+	candidate []byte
+	count     []int
 }
 
 func equalSlice(slice1 []byte, slice2 []byte, tol []float64) bool {
@@ -39,29 +42,52 @@ func equalSlice(slice1 []byte, slice2 []byte, tol []float64) bool {
 	return true
 }
 
-func newTolerance(length int) *RLTolerance {
+func absByteDiff(a, b byte) byte {
+	if a >= b {
+		return a - b
+	}
+	return b - a
+}
+
+func clampFloat(f, lo, hi float64) float64 {
+	f = max(f, lo)
+	return min(f, hi)
+}
+
+func newTolerance(n int) *RLTolerance {
 	return &RLTolerance{
-		tolerance: make([]float64, length),
-		noise:     make([]float64, length),
-		prevBytes: make([]byte, length),
+		anchor:    make([]byte, n),
+		sigma:     make([]float64, n),
+		tolerance: make([]float64, n),
+		candidate: make([]byte, n),
+		count:     make([]int, n),
 	}
 }
 
-func (t *RLTolerance) updateTolerance(a []byte) {
-	// byte by byte tolerance updater
+func (t *RLTolerance) updateTolerance(data []byte) {
 	for i := range len(t.tolerance) { // loop through the bytes
-		break
-		delta := uint8(0) // get the delta from the previous byte (measure noise/jitter)
-		if a[i] > t.prevBytes[i] {
-			delta = a[i] - t.prevBytes[i]
+		res := absByteDiff(t.anchor[i], data[i])                     // get a residual of new data
+		t.sigma[i] = (1-tolAlpha)*t.sigma[i] + tolAlpha*float64(res) // calculate sigma
+		tol := tolMin + tolK*t.sigma[i]                              // calculate the new tolerance
+		t.tolerance[i] = clampFloat(tol, tolMin, tolMax)             // clamp it
+		if float64(res) <= t.tolerance[i] {
+			if absByteDiff(t.candidate[i], data[i]) <= tolBand { // if candidate residual is in valid band
+				t.count[i]++ // keep track of repeats of new candidate anchor
+			} else {
+				t.candidate[i] = data[i] // new candidate observed
+				t.count[i] = 1           // reset the count
+			}
+			if t.count[i] >= int(tolHang) { // if there are enough of the candidate anchor
+				t.anchor[i] = t.candidate[i] // replace the anchor
+				t.count[i] = 0
+			}
 		} else {
-			delta = t.prevBytes[i] - a[i]
+			t.anchor[i] = data[i] // if the residual is way outside the window
+			t.sigma[i] = 0        // pick the new anchor and reset everything
+			t.candidate[i] = data[i]
+			t.count[i] = 0
+			t.tolerance[i] = tolMin
 		}
-		t.noise[i] += tolDecay * (float64(delta) - t.noise[i]) // get the new noise value
-		t.tolerance[i] = tolBase + tolAttack*t.noise[i]        // calculate the new tolerances
-		t.tolerance[i] = max(t.tolerance[i], tolMin)           // clamp them on the low side
-		t.tolerance[i] = min(t.tolerance[i], tolMax)           // clamp them on the high side
-		t.prevBytes = a
 	}
 }
 
@@ -94,7 +120,7 @@ func (RC RLECodec) EncodeBlock(src []byte) ([]byte, error) {
 	)
 	for srcIdx < len(src) {
 		srcBytes = src[srcIdx:min(srcIdx+RC.byteLength, len(src))]
-		if !RC.IsLossless() {
+		if !RC.IsLossless() && len(srcBytes) == RC.byteLength {
 			tolerance.updateTolerance(srcBytes)
 		}
 		srcIdx += len(srcBytes)
