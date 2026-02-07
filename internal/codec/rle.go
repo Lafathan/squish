@@ -28,13 +28,13 @@ func equalSlice(slice1 []byte, slice2 []byte, tol []float64) bool {
 	if len(slice1) != len(slice2) {
 		return false
 	}
-	for i, e := range slice1 {
-		if slice2[i] > e {
-			if float64(slice2[i]-e) > tol[i] {
+	for i := range len(slice1) {
+		if slice1[i] > slice2[i] {
+			if float64(slice1[i]-slice2[i]) > tol[i] {
 				return false
 			}
 		} else {
-			if float64(e-slice2[i]) > tol[i] {
+			if float64(slice2[i]-slice1[i]) > tol[i] {
 				return false
 			}
 		}
@@ -65,10 +65,14 @@ func newTolerance(n int) *RLTolerance {
 }
 
 func (t *RLTolerance) updateTolerance(data []byte) {
+	var (
+		res byte
+		tol float64
+	)
 	for i := range len(t.tolerance) { // loop through the bytes
-		res := absByteDiff(t.anchor[i], data[i])                     // get a residual of new data
+		res = absByteDiff(t.anchor[i], data[i])                      // get a residual of new data
 		t.sigma[i] = (1-tolAlpha)*t.sigma[i] + tolAlpha*float64(res) // calculate sigma
-		tol := tolMin + tolK*t.sigma[i]                              // calculate the new tolerance
+		tol = tolMin + tolK*t.sigma[i]                               // calculate the new tolerance
 		t.tolerance[i] = clampFloat(tol, tolMin, tolMax)             // clamp it
 		if float64(res) <= t.tolerance[i] {
 			if absByteDiff(t.candidate[i], data[i]) <= tolBand { // if candidate residual is in valid band
@@ -143,7 +147,7 @@ func (RC RLECodec) EncodeBlock(src []byte) ([]byte, error) {
 			runBytes = srcBytes // reset what you are matching against
 			runLen = 1
 		}
-		if srcIdx >= len(src) { // if you are at a trailing match, emit to write the ramaining length + literals
+		if srcIdx >= len(src) { // trailing match, write ramaining length + literals
 			encodeUpdateGroup(runLen, &flagByte, flagBit, runBytes, &groupBytes)
 			outBytes = append(outBytes, flagByte)
 			outBytes = append(outBytes, groupBytes...)
@@ -180,16 +184,12 @@ func (RC RLECodec) DecodeBlock(src []byte) ([]byte, error) {
 	)
 	for srcIdx < len(src) {
 		decodeGetFlagAndRunLength(&flagByte, flagBit, &runLen, &srcIdx, src)
-		runBytes = src[srcIdx:min((srcIdx+RC.byteLength), len(src))] // get the bytes repeated
-		outLength += runLen * len(runBytes)
+		outLength += runLen * RC.byteLength
 		srcIdx += len(runBytes) // increment past the literal
-		if len(runBytes) < RC.byteLength || srcIdx >= len(src) {
-			flush = true // flush if literal was not full length (RC.byteLength)
+		if srcIdx >= len(src) {
+			break
 		}
-		if flagBit == 0 || flush {
-			if flush {
-				break
-			}
+		if flagBit == 0 {
 			flagBit = 7
 		} else {
 			flagBit--
@@ -198,8 +198,6 @@ func (RC RLECodec) DecodeBlock(src []byte) ([]byte, error) {
 	outBytes := make([]byte, 0, outLength)
 	srcIdx = 0
 	flagBit = 7
-	flagByte = 0x00
-	flush = false
 	runLen = 1
 	for srcIdx < len(src) {
 		decodeGetFlagAndRunLength(&flagByte, flagBit, &runLen, &srcIdx, src)
