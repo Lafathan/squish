@@ -13,7 +13,7 @@ const (
 
 var (
 	primaryRecipes    = []uint8{HUFFMAN, LZSS, RLE, RLE2, RLE3, RLE4}
-	subsequentRecipes = []uint8{LZSS, HUFFMAN}
+	subsequentRecipes = []uint8{HUFFMAN, LZSS}
 )
 
 type AUTOCodec struct {

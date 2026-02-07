@@ -14,6 +14,7 @@ const (
 	HUFFMAN
 	LZSS
 	AUTO
+	MTF
 )
 
 // codec key map
@@ -30,6 +31,7 @@ var CodecMap = map[uint8]Codec{
 	HUFFMAN: HUFFMANCodec{},
 	LZSS:    LZSSCodec{},
 	AUTO:    &AUTOCodec{},
+	MTF:     MTFCodec{},
 }
 
 // codec string to codec ID map
@@ -46,6 +48,7 @@ var StringToCodecIDMap = map[string]uint8{
 	"HUFFMAN": HUFFMAN,
 	"LZSS":    LZSS,
 	"AUTO":    AUTO,
+	"MTF":     MTF,
 }
 
 // codec aliases
