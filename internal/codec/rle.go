@@ -2,11 +2,12 @@ package codec
 
 const (
 	maxRunLength uint8   = 255
-	tolDecay     float64 = 1.0 / 32.0
-	tolAttack    float64 = 2.0
-	tolMin       float64 = 0.0
-	tolMax       float64 = 24.0
-	tolBase      float64 = 1.0
+	tolAlpha     float64 = 0.15 // tolerance sigma decay
+	tolMin       float64 = 2.0  // residual that will always result in conforming to anchor
+	tolMax       float64 = 6.0  // residual that will always result in a new anchor
+	tolK         float64 = 1.5  // variance to tolerance factor
+	tolBand      uint8   = 1    // wiggle allowance when considering new anchor candidate
+	tolHang      uint8   = 3    // required repetitions for candidate to become new anchor
 )
 
 type RLECodec struct {
@@ -15,9 +16,11 @@ type RLECodec struct {
 }
 
 type RLTolerance struct {
+	anchor    []byte
+	sigma     []float64
 	tolerance []float64
-	noise     []float64
-	prevBytes []byte
+	candidate []byte
+	count     []int
 }
 
 func equalSlice(slice1 []byte, slice2 []byte, tol []float64) bool {
@@ -39,29 +42,65 @@ func equalSlice(slice1 []byte, slice2 []byte, tol []float64) bool {
 	return true
 }
 
-func newTolerance(length int) *RLTolerance {
+func absByteDiff(a, b byte) byte {
+	if a >= b {
+		return a - b
+	}
+	return b - a
+}
+
+func clampFloat(f, lo, hi float64) float64 {
+	f = max(f, lo)
+	return min(f, hi)
+}
+
+func newTolerance(n int) *RLTolerance {
 	return &RLTolerance{
-		tolerance: make([]float64, length),
-		noise:     make([]float64, length),
-		prevBytes: make([]byte, length),
+		anchor:    make([]byte, n),
+		sigma:     make([]float64, n),
+		tolerance: make([]float64, n),
+		candidate: make([]byte, n),
+		count:     make([]int, n),
 	}
 }
 
-func (t *RLTolerance) updateTolerance(a []byte) {
-	// byte by byte tolerance updater
+func (t *RLTolerance) updateTolerance(data []byte) {
 	for i := range len(t.tolerance) { // loop through the bytes
-		delta := uint8(0) // get the delta from the previous byte (measure noise/jitter)
-		if a[i] > t.prevBytes[i] {
-			delta = a[i] - t.prevBytes[i]
+		res := absByteDiff(t.anchor[i], data[i])                     // get a residual of new data
+		t.sigma[i] = (1-tolAlpha)*t.sigma[i] + tolAlpha*float64(res) // calculate sigma
+		tol := tolMin + tolK*t.sigma[i]                              // calculate the new tolerance
+		t.tolerance[i] = clampFloat(tol, tolMin, tolMax)             // clamp it
+		if float64(res) <= t.tolerance[i] {
+			if absByteDiff(t.candidate[i], data[i]) <= tolBand { // if candidate residual is in valid band
+				t.count[i]++ // keep track of repeats of new candidate anchor
+			} else {
+				t.candidate[i] = data[i] // new candidate observed
+				t.count[i] = 1           // reset the count
+			}
+			if t.count[i] >= int(tolHang) { // if there are enough of the candidate anchor
+				t.anchor[i] = t.candidate[i] // replace the anchor
+				t.count[i] = 0
+			}
 		} else {
-			delta = t.prevBytes[i] - a[i]
+			t.anchor[i] = data[i] // if the residual is way outside the window
+			t.sigma[i] = 0        // pick the new anchor and reset everything
+			t.candidate[i] = data[i]
+			t.count[i] = 0
+			t.tolerance[i] = tolMin
 		}
-		t.noise[i] += tolDecay * (float64(delta) - t.noise[i]) // get the new noise value
-		t.tolerance[i] = tolBase + tolAttack*t.noise[i]        // calculate the new tolerances
-		t.tolerance[i] = max(t.tolerance[i], tolMin)           // clamp them on the low side
-		t.tolerance[i] = min(t.tolerance[i], tolMax)           // clamp them on the high side
-		t.prevBytes = a
 	}
+}
+
+func encodeUpdateGroup(runLen uint8, flagByte *byte, flagBit uint8, runBytes []byte, groupBytes *[]byte) {
+	if runLen >= 2 { // only replace when you have a run (minumum of 2)
+		*flagByte |= (1 << flagBit)               // set the flag bit based on run length
+		*groupBytes = append(*groupBytes, runLen) // write the run length if it is not a literal
+	} else {
+		for range runLen - 1 {
+			*groupBytes = append(*groupBytes, runBytes...) // write the literal (runs and single literals)
+		}
+	}
+	*groupBytes = append(*groupBytes, runBytes...) // write the literal (runs and single literals)
 }
 
 func (RC RLECodec) EncodeBlock(src []byte) ([]byte, error) {
@@ -69,87 +108,119 @@ func (RC RLECodec) EncodeBlock(src []byte) ([]byte, error) {
 		return src, nil
 	}
 	var (
-		runLen    uint8        = 1                           // current length of the run
-		runBytes  []byte       = nil                         // current bytes being repeated
-		srcIdx    int          = 0                           // index as you traverse the source
-		srcBytes  []byte       = nil                         // current bytes from the source
-		tolerance *RLTolerance = newTolerance(RC.byteLength) // noise and tolerance calculations
+		flagBit    uint8        = 7                                    // current bit representing a pair or not
+		flagByte   byte         = 0x00                                 // byte holding flag bits
+		runLen     uint8        = 1                                    // current length of the run
+		runBytes   []byte       = nil                                  // current bytes being repeated
+		groupBytes []byte       = make([]byte, 0, 8*(RC.byteLength+1)) // current set of encoded bytes
+		srcIdx     int          = 0                                    // index as you traverse the source
+		srcBytes   []byte       = nil                                  // current bytes from the source
+		tolerance  *RLTolerance = newTolerance(RC.byteLength)          // noise and tolerance calculations
+		outBytes   []byte       = make([]byte, 0, len(src)*9/8)        // encoded bytes
 	)
-	if len(src) < RC.byteLength {
-		encBytes := []byte{1}               // return a run length of 1 of the original source
-		encBytes = append(encBytes, src...) // if the source is shorter than the byte length
-		return encBytes, nil
-	}
-	runLen = 1
-	encBytes := make([]byte, 0, (len(src)/RC.byteLength+1)*(RC.byteLength+1))
-	runBytes = src[:RC.byteLength]
-	for srcIdx = RC.byteLength; srcIdx+RC.byteLength <= len(src); srcIdx += RC.byteLength {
-		srcBytes = src[srcIdx : srcIdx+RC.byteLength] // get next set of bytes from the source
-		if !RC.lossless {
+	for srcIdx < len(src) {
+		srcBytes = src[srcIdx:min(srcIdx+RC.byteLength, len(src))]
+		if !RC.IsLossless() && len(srcBytes) == RC.byteLength {
 			tolerance.updateTolerance(srcBytes)
 		}
-		if equalSlice(runBytes, srcBytes, tolerance.tolerance) && runLen < maxRunLength {
-			runLen++ // count them if they match the previous bytes
-			continue
+		srcIdx += len(srcBytes)
+		if runBytes == nil { // if no run has been set yet
+			runBytes = srcBytes // set the run to the current source bytes
+			runLen = 1          // you have a run of length 1
+		} else if equalSlice(runBytes, srcBytes, tolerance.tolerance) && runLen < maxRunLength {
+			runLen++ // if the next source bytes are "equal" to the run bytes, count it
+		} else { // if they are not equal
+			encodeUpdateGroup(runLen, &flagByte, flagBit, runBytes, &groupBytes)
+			if flagBit == 0 { // if you are at the end of your flag
+				outBytes = append(outBytes, flagByte) // write the current group
+				outBytes = append(outBytes, groupBytes...)
+				groupBytes = groupBytes[:0] // reset for the next group
+				flagBit = 7                 // reset the flag bit and byte
+				flagByte = 0x00
+			} else {
+				flagBit--
+			}
+			runBytes = srcBytes // reset what you are matching against
+			runLen = 1
 		}
-		encBytes = append(encBytes, runLen)      // add the run length
-		encBytes = append(encBytes, runBytes...) // add the run bytes
-		runBytes = srcBytes                      // set the run bytes to the new bytes
-		runLen = 1                               // reset the run length
+		if srcIdx >= len(src) { // if you are at a trailing match, emit to write the ramaining length + literals
+			encodeUpdateGroup(runLen, &flagByte, flagBit, runBytes, &groupBytes)
+			outBytes = append(outBytes, flagByte)
+			outBytes = append(outBytes, groupBytes...)
+		}
 	}
-	encBytes = append(encBytes, runLen) // flush the final run
-	encBytes = append(encBytes, runBytes...)
-	if rem := len(src) % RC.byteLength; rem != 0 { // if there are leftover bytes (sub byteLength)
-		encBytes = append(encBytes, 1)                     // add the run length
-		encBytes = append(encBytes, src[len(src)-rem:]...) // add the run bytes
+	return outBytes, nil
+}
+
+func decodeGetFlagAndRunLength(flagByte *byte, flagBit uint8, runLen *int, srcIdx *int, src []byte) {
+	if flagBit == 7 { // if you just reset the flag bit
+		*flagByte = src[*srcIdx] // get a new flag byte
+		*srcIdx++                // move forward
 	}
-	return encBytes, nil
+	if *flagByte&(1<<flagBit) > 0 { // if you come across a run
+		*runLen = int(src[*srcIdx]) // grab the run length
+		*srcIdx++
+	} else {
+		*runLen = 1 // otherwise it is just a single literal
+	}
 }
 
 func (RC RLECodec) DecodeBlock(src []byte) ([]byte, error) {
 	if len(src) == 0 {
-		return []byte{}, nil
+		return src, nil
 	}
 	var (
-		outLen int = 0 // length of the output
-		outIdx int = 0 // how many bytes have been decoded
-		srcIdx int = 0 // index as you traverse the source
-		runLen int = 0 // how long is the current run
+		srcIdx            = 0 // where you are in the source
+		flagBit   uint8   = 7 // current bit index in the flag byte
+		flagByte  byte        // current flag byte
+		runLen    = 1         // current run length
+		runBytes  []byte      // current bytes to be repeated
+		outLength = 0         // first pass variable for allocating for decoding
+		flush     = false     // whether or not you are at the end
 	)
-	if len(src) <= RC.byteLength {
-		return src[1:], nil
-	}
-	for srcIdx < len(src) { // while you are not at the end of the source
-		runLen = int(src[srcIdx]) // count how many bytes will be added
-		srcIdx++                  // jump to the actual bytes to repeat
-		if rem := len(src) - srcIdx; RC.byteLength > rem {
-			outLen += rem // if a short chunk is remaining, add it to the output length
-			break
-		}
-		outLen += runLen * RC.byteLength // increase the output
-		srcIdx += RC.byteLength          // jump to the next run length value
-	}
-	decBytes := make([]byte, outLen) // make the array you need for output
-	srcIdx = 0                       // keep track of where you are in the input
 	for srcIdx < len(src) {
-		runLen = int(src[srcIdx]) // count how many bytes will be added
-		srcIdx++                  // jump to the actual bytes to repeat
-		if rem := len(src) - srcIdx; RC.byteLength > rem {
-			for i := range len(src) - srcIdx {
-				decBytes[outIdx] = src[srcIdx+i] // if a short chunk is remaining, add the bytes to the output
-				outIdx++
-			}
-			break
+		decodeGetFlagAndRunLength(&flagByte, flagBit, &runLen, &srcIdx, src)
+		runBytes = src[srcIdx:min((srcIdx+RC.byteLength), len(src))] // get the bytes repeated
+		outLength += runLen * len(runBytes)
+		srcIdx += len(runBytes) // increment past the literal
+		if len(runBytes) < RC.byteLength || srcIdx >= len(src) {
+			flush = true // flush if literal was not full length (RC.byteLength)
 		}
-		for range runLen { // for every repetition
-			for i := range srcIdx + RC.byteLength - srcIdx {
-				decBytes[outIdx] = src[srcIdx+i] // loop through and add the bytes repeated
-				outIdx++
+		if flagBit == 0 || flush {
+			if flush {
+				break
 			}
+			flagBit = 7
+		} else {
+			flagBit--
 		}
-		srcIdx += RC.byteLength // jump to the next run-bytes pair
 	}
-	return decBytes, nil
+	outBytes := make([]byte, 0, outLength)
+	srcIdx = 0
+	flagBit = 7
+	flagByte = 0x00
+	flush = false
+	runLen = 1
+	for srcIdx < len(src) {
+		decodeGetFlagAndRunLength(&flagByte, flagBit, &runLen, &srcIdx, src)
+		runBytes = src[srcIdx:min((srcIdx+RC.byteLength), len(src))] // get the bytes repeated
+		for range runLen {
+			outBytes = append(outBytes, runBytes...)
+		}
+		srcIdx += len(runBytes) // increment past the literal
+		if len(runBytes) < RC.byteLength || srcIdx >= len(src) {
+			flush = true // flush if literal was not full length (RC.byteLength)
+		}
+		if flagBit == 0 || flush {
+			if flush {
+				break
+			}
+			flagBit = 7
+		} else {
+			flagBit--
+		}
+	}
+	return outBytes, nil
 }
 
 func (RC RLECodec) IsLossless() bool {
