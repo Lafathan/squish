@@ -15,6 +15,7 @@ const (
 	LZSS
 	AUTO
 	MTF
+	BWT
 )
 
 // codec key map
@@ -32,6 +33,7 @@ var CodecMap = map[uint8]Codec{
 	LZSS:    LZSSCodec{},
 	AUTO:    &AUTOCodec{},
 	MTF:     MTFCodec{},
+	BWT:     BWTCodec{},
 }
 
 // codec string to codec ID map
@@ -49,6 +51,7 @@ var StringToCodecIDMap = map[string]uint8{
 	"LZSS":    LZSS,
 	"AUTO":    AUTO,
 	"MTF":     MTF,
+	"BWT":     BWT,
 }
 
 // codec aliases
