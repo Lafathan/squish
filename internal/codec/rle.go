@@ -1,7 +1,7 @@
 package codec
 
 const (
-	maxRunLength uint8   = 255
+	maxRunLength uint8   = 127
 	tolAlpha     float64 = 0.15 // tolerance sigma decay
 	tolMin       float64 = 2.0  // residual that will always result in conforming to anchor
 	tolMax       float64 = 6.0  // residual that will always result in a new anchor
@@ -96,15 +96,24 @@ func (t *RLTolerance) updateTolerance(data []byte) {
 }
 
 func encodeUpdateGroup(runLen uint8, flagByte *byte, flagBit uint8, runBytes []byte, groupBytes *[]byte) {
-	if runLen >= 2 { // only replace when you have a run (minumum of 2)
-		*flagByte |= (1 << flagBit)               // set the flag bit based on run length
-		*groupBytes = append(*groupBytes, runLen) // write the run length if it is not a literal
-	} else {
-		for range runLen - 1 {
-			*groupBytes = append(*groupBytes, runBytes...) // write the literal (runs and single literals)
+	isZero := true                 // if the literals are all zero, you do not need to write them
+	for i := range len(runBytes) { // this improves compression after bwt and mtf
+		if runBytes[i] != 0 {
+			isZero = false
+			break
 		}
 	}
-	*groupBytes = append(*groupBytes, runBytes...) // write the literal (runs and single literals)
+	if runLen >= 2 { // only replace when you have a run (minumum of 2)
+		*flagByte |= (1 << flagBit) // set the flag bit based on run length
+		if isZero {
+			*groupBytes = append(*groupBytes, runLen+128) // write the run length if it is not a literal
+		} else {
+			*groupBytes = append(*groupBytes, runLen)      // write the run length if it is not a literal
+			*groupBytes = append(*groupBytes, runBytes...) // write the literal (runs and single literals)
+		}
+	} else {
+		*groupBytes = append(*groupBytes, runBytes...) // write the literal (runs and single literals)
+	}
 }
 
 func (RC RLECodec) EncodeBlock(src []byte) ([]byte, error) {
@@ -181,10 +190,14 @@ func (RC RLECodec) DecodeBlock(src []byte) ([]byte, error) {
 		runBytes  []byte      // current bytes to be repeated
 		outLength = 0         // first pass variable for allocating for decoding
 		flush     = false     // whether or not you are at the end
+		i         int         // iterater
 	)
 	for srcIdx < len(src) {
 		decodeGetFlagAndRunLength(&flagByte, flagBit, &runLen, &srcIdx, src)
 		outLength += runLen * RC.byteLength
+		if runLen > int(maxRunLength) {
+			runLen -= int(maxRunLength)
+		}
 		srcIdx += len(runBytes) // increment past the literal
 		if srcIdx >= len(src) {
 			break
@@ -201,7 +214,14 @@ func (RC RLECodec) DecodeBlock(src []byte) ([]byte, error) {
 	runLen = 1
 	for srcIdx < len(src) {
 		decodeGetFlagAndRunLength(&flagByte, flagBit, &runLen, &srcIdx, src)
-		runBytes = src[srcIdx:min((srcIdx+RC.byteLength), len(src))] // get the bytes repeated
+		if runLen > int(maxRunLength) { // leading 1 in run length byte means the runs is of zeros
+			runLen -= int(maxRunLength)
+			for i = range len(runBytes) {
+				runBytes[i] = 0x00
+			}
+		} else {
+			runBytes = src[srcIdx:min((srcIdx+RC.byteLength), len(src))] // get the bytes repeated
+		}
 		for range runLen {
 			outBytes = append(outBytes, runBytes...)
 		}

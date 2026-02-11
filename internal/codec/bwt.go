@@ -1,6 +1,9 @@
 package codec
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+	"squish/internal/sqerr"
+)
 
 type BWTCodec struct{}
 
@@ -171,8 +174,11 @@ func (BWTCodec) DecodeBlock(src []byte) ([]byte, error) {
 	}
 	primary := int(binary.BigEndian.Uint64(src[len(src)-8:])) // decode the primary value
 	src = src[:len(src)-8]                                    // chop off the primary value
-	count := histogram(src)                                   // get the histogram
-	cumSum(count)                                             // get the cumulative sum (prefix sums)
+	if primary >= len(src) {
+		return []byte{}, sqerr.New(sqerr.Corrupt, "Primary BWT value is too large")
+	}
+	count := histogram(src) // get the histogram
+	cumSum(count)           // get the cumulative sum (prefix sums)
 	var (
 		outBytes = make([]byte, len(src)) // make an output slice
 		seen     = make([]int, 256)       // helper for counting element occurrences
