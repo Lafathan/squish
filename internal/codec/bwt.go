@@ -52,39 +52,43 @@ func initializeRank(s []uint8, rank, sa []int) int {
 	return r
 }
 
-func sortBySecondKey(inSA, outSA, rank []int, k, r int) {
+func sortBySecondKey(inSA, outSA, rank []int, k int, count []int) {
 	var (
-		count = make([]int, r+2)
-		key   int
-		i     int
-		j     int
+		key int
+		i   int
+		j   int
 	)
+	for i = range len(count) {
+		count[i] = 0 // wipe your histogram
+	}
 	for i = range len(inSA) { // get histogram of ranks for second half of suffix prefix
 		j = inSA[i] + k
-		key = 0
-		if j < len(inSA) {
-			key = rank[j] + 1
+		if j >= len(inSA) {
+			j -= len(inSA)
 		}
+		key = rank[j]
 		count[key]++
 	}
 	cumSum(count)             // get cumulative sum of histogram
 	for i = range len(inSA) { // count-sort suffix array by ranks
 		j = inSA[i] + k
-		key = 0
-		if j < len(inSA) {
-			key = rank[j] + 1
+		if j >= len(inSA) {
+			j -= len(inSA)
 		}
+		key = rank[j]
 		outSA[count[key]] = inSA[i]
 		count[key]++
 	}
 }
 
-func sortByFirstKey(inSA, outSA, rank []int, r int) {
+func sortByFirstKey(inSA, outSA, rank []int, count []int) {
 	var (
-		count = make([]int, r+1)
-		key   int
-		i     int
+		key int
+		i   int
 	)
+	for i = range len(count) {
+		count[i] = 0 // wipe your histogram
+	}
 	for i = range len(inSA) { // get histogram of ranks for first half of suffix prefex
 		count[rank[inSA[i]]]++
 	}
@@ -96,8 +100,9 @@ func sortByFirstKey(inSA, outSA, rank []int, r int) {
 	}
 }
 
-func buildSuffixArray(s []byte) []int {
+func buildCircularSuffixArray(s []byte) []int {
 	var (
+		count   = make([]int, len(s))         // scratch count sort slice to not re-allocate
 		sa      = make([]int, len(s))         // suffix array indexes
 		tmpsa   = make([]int, len(s))         // next iterations of radix sorted suffix array indexes
 		rank    = make([]int, len(s))         // sorted ranking of suffix array indexes
@@ -114,10 +119,10 @@ func buildSuffixArray(s []byte) []int {
 		i       int                           // iterator variable
 	)
 	for k < len(s) && maxRank < len(s) {
-		sortBySecondKey(sa, tmpsa, rank, k, maxRank) // radix sort suffix array by second key rank[i + k]
-		sa, tmpsa = tmpsa, sa                        // save it off
-		sortByFirstKey(sa, tmpsa, rank, maxRank)     // radix sort suffix array by first key rank[i]
-		sa, tmpsa = tmpsa, sa                        // save it off
+		sortBySecondKey(sa, tmpsa, rank, k, count[:maxRank+1]) // radix sort suffix array by second key rank[i + k]
+		sa, tmpsa = tmpsa, sa                                  // save it off
+		sortByFirstKey(sa, tmpsa, rank, count[:maxRank+1])     // radix sort suffix array by first key rank[i]
+		sa, tmpsa = tmpsa, sa                                  // save it off
 		tmpRank[sa[0]] = 0
 		newr = 1
 		for i = 1; i < len(s); i++ { // loop through the suffixes
@@ -125,14 +130,12 @@ func buildSuffixArray(s []byte) []int {
 			cur = sa[i]        // current element
 			prevA = rank[prev] // previous element ranking
 			curA = rank[cur]   // current element ranking
-			prevB = -1         // assume second element of radix sort key is past input length
-			curB = -1
-			if prev+k < len(s) { // if it is not too long
-				prevB = rank[prev+k] // grab the ranking of the second prefix chunk
+			prev += k
+			if prev >= len(s) {
+				prev -= len(s)
 			}
-			if cur+k < len(s) { // if it is not too long
-				curB = rank[cur+k] // grab the ranking of the second prefix chunk
-			}
+			prevB = rank[prev]
+			curB = rank[(cur+k)%len(s)]
 			if (prevA != curA) || (prevB != curB) { // if they are not equal in rank
 				newr += 1 // new max rank is increased
 			}
@@ -152,17 +155,18 @@ func (BWTCodec) EncodeBlock(src []byte) ([]byte, error) {
 	var (
 		outBytes        = make([]byte, len(src), len(src)+8)
 		primary  uint64 = 0 // row of original/unrotated data in sorted suffix array
-		sa              = buildSuffixArray(src)
+		sa              = buildCircularSuffixArray(src)
 		p        int
 	)
 	for i := range len(src) {
 		p = sa[i] // get the current suffix
+		outBytes[i] = src[(p-1+len(src))%len(src)]
 		if p == 0 {
-			outBytes[i] = src[len(src)-1] // element to add is index of suffix array - 1 (wrap around)
-			primary = uint64(i)           // if you are at 0 in SA (whole input) you found your primary index
-		} else {
-			outBytes[i] = src[p-1] // element to add is index of suffix array - 1
-		}
+			//outBytes[i] = src[len(src)-1] // element to add is index of suffix array - 1 (wrap around)
+			primary = uint64(i) // if you are at 0 in SA (whole input) you found your primary index
+		} //else {
+		//	outBytes[i] = src[p-1] // element to add is index of suffix array - 1
+		//}
 	}
 	outBytes = binary.BigEndian.AppendUint64(outBytes, primary) // save the 8 byte big-endian primary index to the tail of your data
 	return outBytes, nil
