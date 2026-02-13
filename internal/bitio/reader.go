@@ -6,10 +6,11 @@ import (
 )
 
 type bitReader struct {
-	reader     io.Reader // io.reader for reading a stream
-	buffer     uint64    // buffer holding current streamed bits
-	nBits      int       // number of bits currently not read from buffer (cursor)
-	readBuffer [8]byte   // bytes to be read when filling in the buffer
+	reader       io.Reader // io.reader for reading a stream
+	buffer       uint64    // buffer holding current streamed bits
+	nBits        int       // number of bits currently not read from buffer (cursor)
+	readBuffer   [8]byte   // bytes to be read when filling in the buffer
+	sBytesToRead int       // scratch number of bytes needed for a read
 }
 
 func NewBitReader(r io.Reader) *bitReader {
@@ -18,15 +19,15 @@ func NewBitReader(r io.Reader) *bitReader {
 
 func (br *bitReader) ReadBits(nbits int) (uint64, error) {
 	if br.nBits < nbits { // read more bytes to have enough bits
-		bytesToRead := (int(nbits) - int(br.nBits) + 7) / 8 // calculate the number of bytes needed
-		if int(br.nBits)+bytesToRead*8 > 64 {               // return if reading too many bytes at once
-			return 0, fmt.Errorf("bitreader error when reading %d bytes: %w", bytesToRead, io.ErrShortBuffer)
+		br.sBytesToRead = (int(nbits) - int(br.nBits) + 7) / 8 // calculate the number of bytes needed
+		if int(br.nBits)+br.sBytesToRead*8 > 64 {              // return if reading too many bytes at once
+			return 0, fmt.Errorf("bitreader error when reading %d bytes: %w", br.sBytesToRead, io.ErrShortBuffer)
 		}
-		_, err := io.ReadFull(br.reader, br.readBuffer[:bytesToRead]) // read in the new data
+		_, err := io.ReadFull(br.reader, br.readBuffer[:br.sBytesToRead]) // read in the new data
 		if err != nil {
-			return 0, fmt.Errorf("bitreader error when reading %d bytes: %w", bytesToRead, err)
+			return 0, fmt.Errorf("bitreader error when reading %d bytes: %w", br.sBytesToRead, err)
 		}
-		for i := range bytesToRead { // add in the new data to the buffer
+		for i := range br.sBytesToRead { // add in the new data to the buffer
 			br.buffer = (br.buffer << 8) | uint64(br.readBuffer[i]) // shift buffer and add the new byte
 			br.nBits += 8                                           // add to total bits in the buffer
 		}
