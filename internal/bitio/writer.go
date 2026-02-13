@@ -13,7 +13,6 @@ type bitWriter struct {
 	sBufShift   int       // scratch
 	sBitShift   int       // scratch
 	sBuffer     uint64    // scratch
-	sBits       uint64    // scratch
 	sBitMask    uint64    // scratch
 	sByte       byte      // scratch
 }
@@ -51,14 +50,13 @@ func (bw *bitWriter) WriteBits(bits uint64, nbits int) error {
 	if nbits > 64 {
 		return fmt.Errorf("bitwriter can only write up to 64 bits per call: %w", io.ErrShortBuffer)
 	}
-	bw.sBufShift = min(64-bw.nBits, nbits)            // how much to move the buffer left to fit the new bits
-	bw.sBitShift = nbits - bw.sBufShift               // how much to shift the bits right to put msb in buffer
-	bw.sBuffer = bw.buffer << bw.sBufShift            // shift the buffer
-	bw.sBits = bits >> bw.sBitShift                   // shift the bits
-	bw.sBitMask = mask64(nbits - bw.sBitShift)        // make a mask so there is no overflow/errors
-	bw.buffer = bw.sBuffer | (bw.sBits & bw.sBitMask) // get the new buffer with added bits on the end
-	nbits = bw.sBitShift                              // get the new number of bits to be added
-	bw.nBits += bw.sBufShift                          // get the new number of bits in the buffer
+	bw.sBufShift = min(64-bw.nBits, nbits)                        // how much to move buffer left to fit new bits
+	bw.sBitShift = nbits - bw.sBufShift                           // shift amount to put msb in buffer
+	bw.sBuffer = bw.buffer << bw.sBufShift                        // shift the buffer
+	bw.sBitMask = mask64(nbits - bw.sBitShift)                    // make a mask so there is no overflow/errors
+	bw.buffer = bw.sBuffer | (bits >> bw.sBitShift & bw.sBitMask) // get the new buffer with added bits on the end
+	nbits = bw.sBitShift                                          // get the new number of bits to be added
+	bw.nBits += bw.sBufShift                                      // get the new number of bits in the buffer
 	if bw.nBits == 64 {
 		err := bw.clearBuffer() // clear the buffer if it is full
 		if err != nil {
@@ -66,10 +64,10 @@ func (bw *bitWriter) WriteBits(bits uint64, nbits int) error {
 		}
 	}
 	if nbits > 0 {
-		bw.sBuffer = bw.buffer << nbits               // shift the buffer to hold left over bits
+		bw.sBuffer = bw.buffer << nbits               // shift buffer to hold left over bits
 		bw.sBitMask = mask64(nbits)                   // make a new mask
 		bw.sBitMask = uint64((1 << nbits) - 1)        // make a new mask
-		bw.buffer = bw.sBuffer | (bits & bw.sBitMask) // add bits to the current buffer
+		bw.buffer = bw.sBuffer | (bits & bw.sBitMask) // add bits to current buffer
 		bw.nBits += nbits                             // add to the count of unwritten bits
 	}
 	return nil

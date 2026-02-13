@@ -10,7 +10,7 @@ type bitReader struct {
 	buffer       uint64    // buffer holding current streamed bits
 	nBits        int       // number of bits currently not read from buffer (cursor)
 	readBuffer   [8]byte   // bytes to be read when filling in the buffer
-	sBytesToRead int       // scratch number of bytes needed for a read
+	sBytesToRead int       // scratch
 }
 
 func NewBitReader(r io.Reader) *bitReader {
