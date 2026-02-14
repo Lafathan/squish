@@ -183,7 +183,7 @@ func (RC RLECodec) DecodeBlock(src []byte) ([]byte, error) {
 	for srcIdx < len(src) {
 		decodeGetFlagAndRunLength(&flagByte, flagBit, &runLen, &srcIdx, src)
 		outLength += runLen * RC.byteLength
-		srcIdx += len(runBytes) // increment past the literal
+		srcIdx += RC.byteLength // increment past the literal
 		if srcIdx >= len(src) {
 			break
 		}
