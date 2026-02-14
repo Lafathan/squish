@@ -11,6 +11,7 @@ const (
 	LRLE2
 	LRLE3
 	LRLE4
+	ZRLE
 	HUFFMAN
 	LZSS
 	AUTO
@@ -29,6 +30,7 @@ var CodecMap = map[uint8]Codec{
 	LRLE2:   RLECodec{byteLength: 2, lossless: false},
 	LRLE3:   RLECodec{byteLength: 3, lossless: false},
 	LRLE4:   RLECodec{byteLength: 4, lossless: false},
+	ZRLE:    ZRLECodec{},
 	HUFFMAN: HUFFMANCodec{},
 	LZSS:    LZSSCodec{},
 	AUTO:    &AUTOCodec{},
@@ -47,6 +49,7 @@ var StringToCodecIDMap = map[string]uint8{
 	"LRLE2":   LRLE2,
 	"LRLE3":   LRLE3,
 	"LRLE4":   LRLE4,
+	"ZRLE":    ZRLE,
 	"HUFFMAN": HUFFMAN,
 	"LZSS":    LZSS,
 	"AUTO":    AUTO,

@@ -1,7 +1,7 @@
 package codec
 
 const (
-	maxRunLength uint8   = 127
+	maxRunLength uint8   = 255
 	tolAlpha     float64 = 0.15 // tolerance sigma decay
 	tolMin       float64 = 2.0  // residual that will always result in conforming to anchor
 	tolMax       float64 = 6.0  // residual that will always result in a new anchor
