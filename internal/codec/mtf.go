@@ -17,7 +17,6 @@ func mtf(src []byte, encode bool) ([]byte, error) {
 		return src, nil
 	}
 	var (
-		srcByte     byte
 		srcIdx            = 0
 		index       uint8 = 0
 		alphabet          = getAlphabet()
@@ -25,7 +24,6 @@ func mtf(src []byte, encode bool) ([]byte, error) {
 		replacement byte
 	)
 	for srcIdx < len(src) {
-		srcByte = src[srcIdx]
 		for e := alphabet.Front(); e != nil; e = e.Next() {
 			if encode {
 				comparison = e.Value.(byte)
@@ -34,7 +32,7 @@ func mtf(src []byte, encode bool) ([]byte, error) {
 				comparison = index
 				replacement = e.Value.(byte)
 			}
-			if srcByte == comparison {
+			if src[srcIdx] == comparison {
 				src[srcIdx] = replacement
 				alphabet.MoveToFront(e)
 				index = 0

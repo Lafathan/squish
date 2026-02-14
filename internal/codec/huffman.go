@@ -52,7 +52,12 @@ func getFrequencyMap(src []byte) *[256]int {
 }
 
 func getHuffmanTreeFromFreqMap(freqMap *[256]int) *node {
-	leaves := &huffmanHeap{}      // instantiate a heap
+	var (
+		leaves = &huffmanHeap{} // instantiate a heap
+		left   *node            // smallest left child node
+		right  *node            // second smallest right child node
+	)
+	//leaves := &huffmanHeap{}      // instantiate a heap
 	heap.Init(leaves)             // initialize it
 	for i := range len(freqMap) { // add nodes to the heap based on the freq map
 		if freqMap[i] > 0 {
@@ -60,12 +65,12 @@ func getHuffmanTreeFromFreqMap(freqMap *[256]int) *node {
 		}
 	}
 	for leaves.Len() > 1 {
-		l := heap.Pop(leaves).(*node) // get the smallest left child node
-		r := heap.Pop(leaves).(*node) // get the second smalleset right child node
-		newNode := node{              // create a new parent node for those children
+		left = heap.Pop(leaves).(*node)  // get the smallest left child node
+		right = heap.Pop(leaves).(*node) // get the second smalleset right child node
+		newNode := node{                 // create a new parent node for those children
 			nodeType:  branch,
-			frequency: l.frequency + r.frequency,
-			children:  [2]*node{l, r},
+			frequency: left.frequency + right.frequency,
+			children:  [2]*node{left, right},
 		}
 		heap.Push(leaves, &newNode) // push that new parent back on to the heap
 	}
@@ -73,8 +78,10 @@ func getHuffmanTreeFromFreqMap(freqMap *[256]int) *node {
 }
 
 func getHuffmanLengthsFromTree(tree *node) *[256]uint8 {
-	lengths := [256]uint8{}            // store the bit lengths for each symbol at the index of that symbol
-	var getCode func(n *node, l uint8) // define a func for recursive depth first search
+	var (
+		lengths = [256]uint8{}         // store the bit lengths for each symbol at the index of that symbol
+		getCode func(n *node, l uint8) // define a func for recursive depth first search
+	)
 	getCode = func(n *node, l uint8) {
 		if n.nodeType == leaf {
 			if l == 0 {
@@ -229,8 +236,8 @@ func (HUFFMANCodec) DecodeBlock(src []byte) ([]byte, error) {
 	d := getHuffmanDictFromLengths(l)  // build the canonical huffman dictionary from the lengths
 	t := getHuffmanTreeFromDict(d)     // build the Huffman tree
 	inBuffer := bitio.NewBitReader(br) // create a bitreader and traverse the tree with bits
-	outBuffer := make([]byte, 0, 4*len(src))
 	var (
+		outBuffer = make([]byte, 0, 4*len(src))
 		padBuffer uint64
 		newBit    uint64
 	)
