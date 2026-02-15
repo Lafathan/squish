@@ -8,10 +8,8 @@ import (
 	"slices"
 	"sort"
 	"squish/internal/codec"
-	"squish/internal/frame"
 	"squish/internal/pipeline"
 	"squish/internal/sqerr"
-	"strconv"
 	"strings"
 )
 
@@ -70,26 +68,10 @@ func runEnc(args []string) sqerr.Code {
 	}
 
 	// parse codec pipeline
-	*codecPipe = strings.ToUpper(*codecPipe)
-	for alias, expandedCodecs := range codec.CodecAliases {
-		*codecPipe = strings.ReplaceAll(*codecPipe, alias, expandedCodecs)
-	}
-	codecStrings := strings.Split(*codecPipe, "-")
-	codecList := make([]uint8, 0, len(codecStrings))
-	for _, cString := range codecStrings {
-		if cString == "" {
-			fmt.Fprintf(os.Stderr, "enc: empty codec in pipeline")
-			return sqerr.Usage
-		}
-		codecID, ok := codec.StringToCodecIDMap[strings.ToUpper(cString)]
-		if !ok {
-			fmt.Fprintf(os.Stderr, "enc: unknown codec %q (try: squish enc -list-codecs)", cString)
-			return sqerr.Unsupported
-		}
-		codecList = append(codecList, codecID)
-	}
-	if slices.Contains(codecList, codec.AUTO) {
-		codecList = []uint8{codec.AUTO}
+	codecList, err := parseCodecPipeline(*codecPipe)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "enc: failed to parse codec list %q: %v", *codecPipe, err)
+		return sqerr.ErrorCode(err)
 	}
 
 	// parse output file
@@ -97,62 +79,25 @@ func runEnc(args []string) sqerr.Code {
 	if *outPath2 != "" {
 		output = *outPath2
 	}
-	var outFile *os.File
-	var closeFile bool
-	if output == "" {
-		outFile = os.Stdout
-	} else {
-		f, err := os.Create(output)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "enc: failed to write file %q: %v", output, err)
-			return sqerr.Success
-		}
-		outFile = f
-		closeFile = true
+	outFile, closeFn, err := openOutput(output)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "enc: failed to write file %q: %v", output, err)
+		return sqerr.IO
 	}
-	if closeFile {
-		defer outFile.Close()
-	}
+	defer closeFn()
 
 	// parse the checksum flags
-	var checksumFlag byte
-	switch *checksum {
-	case "":
-		checksumFlag = frame.NoChecksum
-	case "u":
-		checksumFlag = frame.UncompressedChecksum
-	case "c":
-		checksumFlag = frame.CompressedChecksum
-	case "uc":
-		checksumFlag = frame.UncompressedChecksum | frame.CompressedChecksum
-	default:
-		fmt.Fprintf(os.Stderr, "enc: unknown checksum value %q", *checksum)
-		return sqerr.Usage
+	checksumFlag, err := parseChecksum(*checksum)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "enc: failed to parse checksum value %q: %v", *checksum, err)
+		return sqerr.ErrorCode(err)
 	}
 
 	// parse the blocksize flags
-	var blockByteSize int
-	var matched bool = false
-	bs := strings.TrimSpace(*blockSize)
-	units := [5]string{"KiB", "MiB", "KB", "MB", "B"}
-	mags := [5]int{1 << 10, 1 << 20, 1000, 1000000, 1}
-	for i := range 5 {
-		prefix, found := strings.CutSuffix(bs, units[i])
-		prefix = strings.TrimSpace(prefix)
-		if found {
-			val, err := strconv.Atoi(prefix)
-			if err != nil || val <= 0 {
-				fmt.Printf("enc: invalid blocksize %q (expected e.g. 256KiB, 1MiB)", bs)
-				return sqerr.Usage
-			}
-			blockByteSize = val * mags[i]
-			matched = true
-			break
-		}
-	}
-	if !matched {
-		fmt.Printf("enc: invalid blocksize %q (expected e.g. 256KiB, 1MiB)", bs)
-		return sqerr.Usage
+	blockByteSize, err := parseBlockSize(*blockSize)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "enc: %v", err)
+		return sqerr.ErrorCode(err)
 	}
 
 	// get positional arguments
@@ -166,23 +111,13 @@ func runEnc(args []string) sqerr.Code {
 		return sqerr.Usage
 	}
 
-	// open the input file
-	var inFile *os.File
-	closeFile = false
-	if input == "" {
-		inFile = os.Stdin
-	} else {
-		f, err := os.Open(input)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "enc: failed to open input file %q", input)
-			return sqerr.IO
-		}
-		inFile = f
-		closeFile = true
+	// parse input file
+	inFile, closeFn, err := openInput(input)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "enc: failed to open input file %q: %v", input, err)
+		return sqerr.IO
 	}
-	if closeFile {
-		defer inFile.Close()
-	}
+	defer closeFn()
 
 	// call the business
 	if err := pipeline.Encode(inFile, outFile, codecList, blockByteSize, checksumFlag); err != nil {

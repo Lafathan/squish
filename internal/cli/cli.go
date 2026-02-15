@@ -59,7 +59,7 @@ func Run(args []string) sqerr.Code {
 		fmt.Fprintf(os.Stdout, "squish %s (commit %s, built %s)\n", version.Version, version.Commit, version.Date)
 		return sqerr.Success
 	}
-	switch args[0] {
+	switch flagSet.Args()[0] {
 	case "enc":
 		return runEnc(args[1:])
 	case "dec":

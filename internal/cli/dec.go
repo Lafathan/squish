@@ -43,22 +43,12 @@ func runDec(args []string) sqerr.Code {
 	if *outPath2 != "" {
 		output = *outPath2
 	}
-	var outFile *os.File
-	var closeFile bool
-	if output == "" {
-		outFile = os.Stdout
-	} else {
-		f, err := os.Create(output)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "dec: failed to write file %q: %v", output, err)
-			return sqerr.IO
-		}
-		outFile = f
-		closeFile = true
+	outFile, closeFn, err := openOutput(output)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "dec: failed to write file %q: %v", output, err)
+		return sqerr.IO
 	}
-	if closeFile {
-		defer outFile.Close()
-	}
+	defer closeFn()
 
 	// get positional arguments
 	remainingArgs := flagSet.Args()
@@ -71,23 +61,13 @@ func runDec(args []string) sqerr.Code {
 		return sqerr.IO
 	}
 
-	// open the input file
-	var inFile *os.File
-	closeFile = false
-	if input == "" {
-		inFile = os.Stdin
-	} else {
-		f, err := os.Open(input)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "dec: failed to open input file %q", input)
-			return sqerr.IO
-		}
-		inFile = f
-		closeFile = true
+	// parse input file
+	inFile, closeFn, err := openInput(input)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "dec: failed to open input file %q: %v", input, err)
+		return sqerr.IO
 	}
-	if closeFile {
-		defer inFile.Close()
-	}
+	defer closeFn()
 
 	// call the business
 	if err := pipeline.Decode(inFile, outFile); err != nil {
