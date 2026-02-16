@@ -1,5 +1,7 @@
 package codec
 
+import "squish/internal/sqerr"
+
 const (
 	maxLookBack  = 1<<12 - 1              // 4095 - how far back to look for matches
 	minMatchLen  = 3                      // min match length
@@ -25,7 +27,7 @@ func splitBytes(a byte, b byte) (int, int) {
 func hashBytes(bytes []byte) int {
 	hash := 0
 	for i := range len(bytes) {
-		hash = (hash << 8) | int(bytes[i])
+		hash = (hash << 6) | int(bytes[i])
 	}
 	return hash & (hashSize - 1)
 }
@@ -78,7 +80,7 @@ func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
 						src[curMatchIdx+curMatchLen] == src[srcIdx+curMatchLen] { // and the match continues
 						curMatchLen++ // keep counting
 					}
-					if curMatchLen >= minMatchLen && curMatchLen > bestMatchLen { // save it off if is the best match yet
+					if curMatchLen >= minMatchLen && curMatchLen > bestMatchLen { // save it off if it is the best match yet
 						bestMatchLen = curMatchLen
 						bestLookBack = srcIdx - curMatchIdx
 						if bestMatchLen == maxMatchLen {
@@ -136,9 +138,16 @@ func (LZSSCodec) DecodeBlock(src []byte) ([]byte, error) {
 			if flagBit == 0 {                      // if it is a literal
 				outLen++ // increase the output length by one byte
 				srcIdx++ // move forward as you scan through the source
-			} else if srcIdx+1 < len(src) {
-				outLen += int(src[srcIdx+1]&0x0F) + minMatchLen // increase the output by the length of the run
-				srcIdx += 2                                     // move forward as you scan through the source
+			} else { // if it is a lookback-run literal pair
+				if srcIdx+1 >= len(src) {
+					return []byte{}, sqerr.New(sqerr.Corrupt, "Invalid LZSS format")
+				}
+				runLen = int(src[srcIdx+1]&0x0F) + minMatchLen // get how long the match is
+				if runLen < minMatchLen {
+					return []byte{}, sqerr.New(sqerr.Corrupt, "Invalid match length in LZSS")
+				}
+				outLen += runLen // increase the output by the length of the match
+				srcIdx += 2      // move forward over the two bytes representing the match
 			}
 			if srcIdx > len(src) {
 				break

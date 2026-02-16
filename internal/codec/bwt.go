@@ -73,7 +73,7 @@ func sortBySecondKey(inSA, outSA, rank []int, k int, count []int) {
 	for i = range len(inSA) { // count-sort suffix array by ranks
 		j = inSA[i] + k
 		if j >= len(inSA) {
-			j -= len(inSA)
+			j -= len(inSA) // fast modulus
 		}
 		key = rank[j]
 		outSA[count[key]] = inSA[i]
@@ -132,7 +132,7 @@ func buildCircularSuffixArray(s []byte) []int {
 			curA = rank[cur]   // current element ranking
 			prev += k
 			if prev >= len(s) {
-				prev -= len(s)
+				prev -= len(s) // fast modulus
 			}
 			prevB = rank[prev]
 			curB = rank[(cur+k)%len(s)]
@@ -159,16 +159,13 @@ func (BWTCodec) EncodeBlock(src []byte) ([]byte, error) {
 		p        int
 	)
 	for i := range len(src) {
-		p = sa[i] // get the current suffix
-		outBytes[i] = src[(p-1+len(src))%len(src)]
+		p = sa[i]                                  // get the current suffix
+		outBytes[i] = src[(p-1+len(src))%len(src)] // save the element prior to the start of that suffix
 		if p == 0 {
-			//outBytes[i] = src[len(src)-1] // element to add is index of suffix array - 1 (wrap around)
 			primary = uint64(i) // if you are at 0 in SA (whole input) you found your primary index
-		} //else {
-		//	outBytes[i] = src[p-1] // element to add is index of suffix array - 1
-		//}
+		}
 	}
-	outBytes = binary.BigEndian.AppendUint64(outBytes, primary) // save the 8 byte big-endian primary index to the tail of your data
+	outBytes = binary.BigEndian.AppendUint64(outBytes, primary) // save 8 byte big-endian primary to tail of data
 	return outBytes, nil
 }
 

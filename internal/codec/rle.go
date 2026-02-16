@@ -1,7 +1,7 @@
 package codec
 
 const (
-	maxRunLength uint8   = 255
+	maxRunLength uint8   = 255  // max run length
 	tolAlpha     float64 = 0.15 // tolerance sigma decay
 	tolMin       float64 = 2.0  // residual that will always result in conforming to anchor
 	tolMax       float64 = 6.0  // residual that will always result in a new anchor
@@ -11,35 +11,16 @@ const (
 )
 
 type RLECodec struct {
-	byteLength int
-	lossless   bool
+	byteLength int  // byte width for matching consecutive chunks
+	lossless   bool // whether or not to use a tolerance for snapping
 }
 
 type RLTolerance struct {
-	anchor    []byte
-	sigma     []float64
-	tolerance []float64
-	candidate []byte
-	count     []int
-}
-
-func equalSlice(slice1 []byte, slice2 []byte, tol []float64) bool {
-	// element-wise slice comparison
-	if len(slice1) != len(slice2) {
-		return false
-	}
-	for i := range len(slice1) {
-		if slice1[i] > slice2[i] {
-			if float64(slice1[i]-slice2[i]) > tol[i] {
-				return false
-			}
-		} else {
-			if float64(slice2[i]-slice1[i]) > tol[i] {
-				return false
-			}
-		}
-	}
-	return true
+	anchor    []byte    // anchor value to snap values to
+	sigma     []float64 // current weighted error value
+	tolerance []float64 // tolerance used for snapping
+	candidate []byte    // potential new anchor
+	count     []int     // current run length of candidate
 }
 
 func absByteDiff(a, b byte) byte {
@@ -49,9 +30,22 @@ func absByteDiff(a, b byte) byte {
 	return b - a
 }
 
+func equalSlice(slice1 []byte, slice2 []byte, tol []float64) bool {
+	// element-wise slice comparison
+	if len(slice1) != len(slice2) {
+		return false
+	}
+	for i := range len(slice1) { // loop through slice elements
+		if float64(absByteDiff(slice1[i], slice2[i])) > tol[i] { // the diff is greater than tolerance
+			return false // they are not equal
+		}
+	}
+	return true
+}
+
 func clampFloat(f, lo, hi float64) float64 {
-	f = max(f, lo)
-	return min(f, hi)
+	f = max(f, lo)    // clamp the max
+	return min(f, hi) // clamp the min
 }
 
 func newTolerance(n int) *RLTolerance {
@@ -182,8 +176,8 @@ func (RC RLECodec) DecodeBlock(src []byte) ([]byte, error) {
 	)
 	for srcIdx < len(src) {
 		decodeGetFlagAndRunLength(&flagByte, flagBit, &runLen, &srcIdx, src)
-		outLength += runLen * RC.byteLength
-		srcIdx += RC.byteLength // increment past the literal
+		outLength += runLen * RC.byteLength // increment the length by the run * width
+		srcIdx += RC.byteLength             // increment past the literal
 		if srcIdx >= len(src) {
 			break
 		}
