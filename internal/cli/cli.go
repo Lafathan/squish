@@ -42,15 +42,12 @@ func Run(args []string) sqerr.Code {
 		fmt.Fprintf(os.Stdout, "\n")
 		fmt.Fprintf(os.Stdout, "Run 'squish <command> -h' for command specific help.\n")
 	}
-
 	if err := flagSet.Parse(args); err != nil {
 		if err == flag.ErrHelp {
 			return sqerr.Success
 		}
-		flagSet.Usage()
 		return sqerr.Usage
 	}
-
 	if len(args) == 0 {
 		flagSet.Usage()
 		return sqerr.Success
@@ -59,7 +56,7 @@ func Run(args []string) sqerr.Code {
 		fmt.Fprintf(os.Stdout, "squish %s (commit %s, built %s)\n", version.Version, version.Commit, version.Date)
 		return sqerr.Success
 	}
-	switch flagSet.Args()[0] {
+	switch args[0] {
 	case "enc":
 		return runEnc(args[1:])
 	case "dec":
