@@ -157,10 +157,15 @@ func (BWTCodec) EncodeBlock(src []byte) ([]byte, error) {
 		primary  uint64 = 0 // row of original/unrotated data in sorted suffix array
 		sa              = buildCircularSuffixArray(src)
 		p        int
+		prev     int
 	)
 	for i := range len(src) {
-		p = sa[i]                                  // get the current suffix
-		outBytes[i] = src[(p-1+len(src))%len(src)] // save the element prior to the start of that suffix
+		p = sa[i] // get the current suffix
+		prev = p - 1
+		if prev < 0 {
+			prev = len(src) - 1
+		}
+		outBytes[i] = src[prev] // save the element prior to the start of that suffix
 		if p == 0 {
 			primary = uint64(i) // if you are at 0 in SA (whole input) you found your primary index
 		}
