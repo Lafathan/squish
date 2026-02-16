@@ -31,8 +31,7 @@ func (fw *frameWriter) WriteBlock(b Block, payload io.Reader) error {
 		}
 		payload = bytes.NewReader(nil)
 	}
-	err := writeBlock(fw, b) // build block header
-	if err != nil {
+	if err := writeBlock(fw, b); err != nil { // build block header
 		return fmt.Errorf("failed to write header: %w", err)
 	}
 	if b.CSize == 0 { // check for zero length

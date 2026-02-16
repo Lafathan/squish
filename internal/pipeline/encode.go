@@ -18,8 +18,7 @@ func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize int, check
 		ChecksumMode: checksumMode,
 	}
 	fw := frame.NewFrameWriter(dst, header) // make a framewriter
-	err := fw.Ready()                       // write the header
-	if err != nil {
+	if err := fw.Ready(); err != nil {      // write the header
 		return sqerr.CodedError(err, sqerr.IO, "failed to ready frame writer")
 	}
 	defer fw.Close()                               // defer the close to write EOS block
@@ -72,8 +71,7 @@ func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize int, check
 			Checksum:  checksum,
 			Codec:     bCodecsID,
 		}
-		err = fw.WriteBlock(block, bytes.NewReader(data)) // write the block
-		if err != nil {
+		if err = fw.WriteBlock(block, bytes.NewReader(data)); err != nil { // write the block
 			return sqerr.CodedError(err, sqerr.IO, "failed to write encoded block")
 		}
 		if n < blockSize { // break if the last block was not full (partial final block)

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"slices"
 	"squish/internal/codec"
@@ -51,7 +52,7 @@ func parseCodecPipeline(pipeline string) ([]uint8, error) {
 		}
 		codecID, ok := codec.StringToCodecIDMap[strings.ToUpper(cString)]
 		if !ok {
-			return codecList, sqerr.New(sqerr.Unsupported, "unknown codec")
+			return codecList, sqerr.New(sqerr.Unsupported, fmt.Sprintf("unknown codec %q", cString))
 		}
 		codecList = append(codecList, codecID)
 	}
@@ -73,7 +74,7 @@ func parseBlockSize(size string) (int, error) {
 		if found {
 			val, err := strconv.Atoi(prefix)
 			if err != nil || val <= 0 {
-				return 0, sqerr.New(sqerr.Usage, "invalid blocksize %q")
+				return 0, sqerr.New(sqerr.Usage, fmt.Sprintf("invalid blocksize %q", size))
 			}
 			blockByteSize = val * mags[i]
 			matched = true
@@ -81,7 +82,7 @@ func parseBlockSize(size string) (int, error) {
 		}
 	}
 	if !matched {
-		return 0, sqerr.New(sqerr.Usage, "invalid blocksize %q")
+		return 0, sqerr.New(sqerr.Usage, fmt.Sprintf("invalid blocksize %q", size))
 	}
 	return blockByteSize, nil
 }

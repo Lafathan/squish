@@ -36,8 +36,7 @@ func (bw *bitWriter) clearBuffer() error {
 		bw.buffer &= (1 << bw.nBits) - 1                                // mask it down to prevent overflow
 		bw.writeBuffer[i] = bw.sByte                                    // write the byte to the writing buffer
 	}
-	_, err := bw.writer.Write(bw.writeBuffer[:bytesToWrite]) // write the bytes
-	if err != nil {
+	if _, err := bw.writer.Write(bw.writeBuffer[:bytesToWrite]); err != nil { // write the bytes
 		return fmt.Errorf("bitwriter error when writing %d bytes: %w", bytesToWrite, err)
 	}
 	return nil
@@ -58,8 +57,7 @@ func (bw *bitWriter) WriteBits(bits uint64, nbits int) error {
 	nbits = bw.sBitShift                                          // get the new number of bits to be added
 	bw.nBits += bw.sBufShift                                      // get the new number of bits in the buffer
 	if bw.nBits == 64 {
-		err := bw.clearBuffer() // clear the buffer if it is full
-		if err != nil {
+		if err := bw.clearBuffer(); err != nil { // clear the buffer if it is full
 			return err
 		}
 	}
@@ -76,13 +74,11 @@ func (bw *bitWriter) WriteBits(bits uint64, nbits int) error {
 func (bw *bitWriter) Flush() (int, error) {
 	padding := (8 - bw.nBits%8) % 8 // pad the bit stream to acheive valid byte length
 	if padding != 0 {
-		err := bw.WriteBits(0, padding)
-		if err != nil {
+		if err := bw.WriteBits(0, padding); err != nil {
 			return padding, fmt.Errorf("bitwriter error when flushing: %w", err)
 		}
 	}
-	err := bw.clearBuffer() // then clear the buffer
-	if err != nil {
+	if err := bw.clearBuffer(); err != nil { // then clear the buffer
 		return padding, fmt.Errorf("bitwriter error when flushing: %w", err)
 	}
 	return padding, nil

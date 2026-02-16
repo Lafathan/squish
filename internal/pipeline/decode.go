@@ -10,9 +10,8 @@ import (
 )
 
 func Decode(src io.Reader, dst io.Writer) error {
-	fr := frame.NewFrameReader(src) // instantiate a FrameReader
-	err := fr.Ready()               // read in the header of the stream
-	if err != nil {
+	fr := frame.NewFrameReader(src)    // instantiate a FrameReader
+	if err := fr.Ready(); err != nil { // read in the header of the stream
 		return sqerr.CodedError(err, sqerr.ReadErrorCode(err), "failed to read input header")
 	}
 	for {

@@ -171,8 +171,7 @@ func deserializeHuffmanLengths(br io.Reader) (*[256]uint8, error) {
 		err           error
 	)
 	for {
-		_, err = io.ReadFull(br, lenSymbolPair) // read in the bit length and symbol
-		if err != nil {
+		if _, err = io.ReadFull(br, lenSymbolPair); err != nil { // read in the bit length and symbol
 			return &lengths, fmt.Errorf("error while reading huffman dictionary: %w", err)
 		}
 		if lenSymbolPair[0] == 0x00 {
@@ -203,10 +202,9 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, error) {
 	for i := range len(src) {
 		remainingBits = d[src[i]].length // how many bits need written
 		for remainingBits > 0 {
-			bitsToWrite = min(remainingBits, 64)                        // determine how many bits (max 64 due to bitwriter)
-			tmpBig.Rsh(d[src[i]].bits, uint(remainingBits-bitsToWrite)) // shift it to get bits of interest in LSB
-			err = bw.WriteBits(tmpBig.Uint64(), bitsToWrite)            // write it
-			if err != nil {
+			bitsToWrite = min(remainingBits, 64)                              // determine how many bits (max 64 due to bitwriter)
+			tmpBig.Rsh(d[src[i]].bits, uint(remainingBits-bitsToWrite))       // shift it to get bits of interest in LSB
+			if err = bw.WriteBits(tmpBig.Uint64(), bitsToWrite); err != nil { // write it
 				return []byte{}, fmt.Errorf("error while writing huffman encoded bits: %w", err)
 			}
 			remainingBits -= bitsToWrite // count down the bits to be written
