@@ -5,37 +5,43 @@ import "container/list"
 type MTFCodec struct{}
 
 func getAlphabet() *list.List {
-	alphabet := list.New() // new doubly linked list
-	for i := range 255 {   // for all byte values
-		alphabet.PushFront(byte(i)) // add them to the front of the list
+	// build a doubly linked list for an byte alphabet
+	alphabet := list.New()
+	for i := range 255 {
+		alphabet.PushFront(byte(i))
 	}
 	return alphabet
 }
 
 func mtf(src []byte, encode bool) ([]byte, error) {
+	// encode src using move-to-front transform (MTF)
 	if len(src) == 0 {
 		return src, nil
 	}
 	var (
-		srcIdx            = 0             // where you are in the input
-		index       uint8 = 0             // for counting depth of value in dictionary
-		alphabet          = getAlphabet() // the alphabet
-		comparison  byte                  // what value to compare to
-		replacement byte                  // what value to replace with
+		srcIdx            = 0
+		index       uint8 = 0 // for counting depth of value in dictionary
+		alphabet          = getAlphabet()
+		comparison  byte  // what value to compare to
+		replacement byte  // what value to replace with
 	)
-	for srcIdx < len(src) { // for each value in the input
-		for e := alphabet.Front(); e != nil; e = e.Next() { // for each value in the alphabet
+	for srcIdx < len(src) {
+		// go through the alphabet until you encounter the current value
+		for e := alphabet.Front(); e != nil; e = e.Next() {
 			if encode {
-				comparison = e.Value.(byte) // swap the input byte with the
-				replacement = index         // index of the value in the alphabet
+				// for encoding compare input to alphabet value, replace with index of match
+				comparison = e.Value.(byte)
+				replacement = index
 			} else {
-				comparison = index           // swap the input byte with the
-				replacement = e.Value.(byte) // value at index in the alphabet
+				// for decoding compare input to indiex value, replace with value of alphabet
+				comparison = index
+				replacement = e.Value.(byte)
 			}
+			// perform comparison, moving matching alphabet element to the front
 			if src[srcIdx] == comparison {
 				src[srcIdx] = replacement
-				alphabet.MoveToFront(e) // move the match to the front of the alphabet
-				index = 0               // start at the beginning again
+				alphabet.MoveToFront(e)
+				index = 0
 				break
 			} else {
 				index++

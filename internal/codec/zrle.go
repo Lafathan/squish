@@ -5,82 +5,89 @@ import (
 	"squish/internal/sqerr"
 )
 
-type ZRLECodec struct {
-	byteLength int
-	lossless   bool
-}
+type ZRLECodec struct{}
 
 func (ZRLECodec) EncodeBlock(src []byte) ([]byte, error) {
+	// run length encode all runs of zeros (0x00) using a variable length integer length
 	if len(src) == 0 {
 		return src, nil
 	}
 	var (
-		runLen   uint64 = 0                         // length of current run
-		srcIdx   int    = 0                         // index as you traverse the source
-		outBytes []byte = make([]byte, 0, len(src)) // encoded bytes
+		runLen uint64 = 0
+		srcIdx int    = 0
+		out    []byte = make([]byte, 0, len(src))
 	)
-	for srcIdx < len(src) { // loop through elements
-		if src[srcIdx] == 0x00 { // if it is a zero
+	for srcIdx < len(src) {
+		// encode all zeros with a zero following by a length of the run
+		if src[srcIdx] == 0x00 {
 			if runLen == 0 {
-				outBytes = append(outBytes, 0x00) // make the run start with a zero
+				out = append(out, 0x00)
 			}
-			runLen++ // increment the run
-		} else { // if it is not a zero
-			if runLen > 0 { // if ending a run
-				outBytes = binary.AppendUvarint(outBytes, runLen) // append the run length
-				runLen = 0                                        // reset the run
+			runLen++
+		} else {
+			if runLen > 0 {
+				// encode run length using a variable length integer
+				out = binary.AppendUvarint(out, runLen)
+				runLen = 0
 			}
-			outBytes = append(outBytes, src[srcIdx]) // append the new non-zero literal
+			out = append(out, src[srcIdx]) // append non-zero literals
 		}
-		srcIdx++ // go to next element
+		srcIdx++
 	}
+	// flush last run of zeros
 	if runLen > 0 {
-		outBytes = binary.AppendUvarint(outBytes, runLen) // flush last run
+		out = binary.AppendUvarint(out, runLen)
 	}
-	return outBytes, nil
+	return out, nil
 }
 
 func (ZRLECodec) DecodeBlock(src []byte) ([]byte, error) {
+	// decode run length encoding by expanding runs for the literal 0x00
 	if len(src) == 0 {
 		return src, nil
 	}
 	var (
-		srcIdx           = 0 // where you are in the source
-		outLength uint64 = 0 // first pass variable for allocating for decoding
-		run       uint64     // current run length
-		bytes     int        // bytes read per run length varint
+		srcIdx           = 0
+		outLength uint64 = 0
+		runLen    uint64
+		bytes     int // bytes read per run length varint
 	)
 	// first pass for counting output length
-	for srcIdx < len(src) { // loop through the elements
-		if src[srcIdx] == 0x00 { // if it is a zero
+	for srcIdx < len(src) {
+		if src[srcIdx] == 0x00 {
 			if srcIdx+1 > len(src) {
 				return []byte{}, sqerr.New(sqerr.Corrupt, "Invalid run length format")
 			}
-			run, bytes = binary.Uvarint(src[srcIdx+1:]) // read the varint of the run length
-			if bytes >= len(src)-srcIdx || run < 1 {
+			// read the run length value and number of bytes
+			runLen, bytes = binary.Uvarint(src[srcIdx+1:])
+			if bytes >= len(src)-srcIdx || runLen < 1 {
 				return []byte{}, sqerr.New(sqerr.Corrupt, "Invalid run length")
 			}
-			outLength += run // add the number of bytes to the length
-			srcIdx += bytes  // move past the varint bytes
+			outLength += runLen
+			srcIdx += bytes
 		}
-		outLength++ // add the literal to the length
-		srcIdx++    // move past the literal byte
+		outLength++
+		srcIdx++
 	}
-	srcIdx = 0                             // start at the beginning again
-	outBytes := make([]byte, 0, outLength) // make a slice for the output
-	for srcIdx < len(src) {                // loop through the elements
-		if src[srcIdx] == 0x00 { // if it is a zero
-			run, bytes = binary.Uvarint(src[srcIdx+1:]) // read the varint of the run length
-			for range run {
-				outBytes = append(outBytes, 0x00) // add a zero run times
+	// second pass, expand zero runs to full length
+	srcIdx = 0
+	out := make([]byte, 0, outLength)
+	for srcIdx < len(src) {
+		if src[srcIdx] == 0x00 {
+			// read the run length value and number of bytes
+			runLen, bytes = binary.Uvarint(src[srcIdx+1:])
+			// continually add zeros to meet run length
+			for range runLen {
+				out = append(out, 0x00)
 			}
-			srcIdx += bytes // skip past the varint
+			srcIdx += bytes
 		} else {
-			outBytes = append(outBytes, src[srcIdx]) // add the literal
+			// add the literal if not a zero
+			out = append(out, src[srcIdx])
 		}
-		srcIdx++ // move past the literal
+		srcIdx++
 	}
-	return outBytes, nil
+	return out, nil
 }
 
 func (ZRLECodec) IsLossless() bool {
