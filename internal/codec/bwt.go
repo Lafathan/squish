@@ -107,9 +107,9 @@ func sortByFirstKey(inSA, outSA, rank []uint32, count []uint32) {
 	for i = range len(inSA) {
 		count[rank[inSA[i]]]++
 	}
-	// perform connt-sort
-	cumSum(count)             // get cumulative sum of histogram
-	for i = range len(inSA) { // count-sort suffix array by ranks
+	// perform count-sort
+	cumSum(count)
+	for i = range len(inSA) {
 		key = uint32(rank[inSA[i]])
 		outSA[count[key]] = inSA[i]
 		count[key]++
@@ -224,8 +224,8 @@ func (BWTCodec) DecodeBlock(src []byte) ([]byte, error) {
 	count := histogram(src)
 	cumSum(count)
 	var (
-		out    = make([]byte, len(src)) // make an output slice
-		next   = make([]uint32, len(src))
+		out    = make([]byte, len(src))   // make an output slice
+		next   = make([]uint32, len(src)) // last-to-first column index mapping array
 		length = uint32(len(src))
 		i      uint32
 		b      byte
