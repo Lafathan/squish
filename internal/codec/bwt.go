@@ -3,47 +3,79 @@ package codec
 import (
 	"encoding/binary"
 	"squish/internal/sqerr"
+	"sync"
 )
 
 type BWTCodec struct{}
 
-func histogram(bytes []byte) []int {
-	var (
-		hist = make([]int, 256)
-	)
-	for i := range len(bytes) {
-		hist[bytes[i]]++
-	}
-	return hist
+type bwtWorkspace struct {
+	sa      []uint32 // suffix array indexes to be sorted
+	tmpsa   []uint32 // next iterations of radix sorted suffix array indexes
+	rank    []uint32 // ranking of suffix array indexes
+	tmpRank []uint32 // next iteration of sorted rankings of suffix array indexes
+	count   []uint32 // scratch count sort slice to not re-allocate
+	pos     []uint32 // scratch count sort slice for byte values
+	next    []uint32
 }
 
-func cumSum(bytes []int) {
-	var (
-		sum = 0
-		val int
-	)
+var bwtPool = sync.Pool{
+	// creates a new workspace
+	New: func() any {
+		return &bwtWorkspace{}
+	},
+}
+
+func grow32(slice []uint32, length int) []uint32 {
+	// function to grow slices
+	if cap(slice) < length {
+		return make([]uint32, length)
+	}
+	return slice[:length]
+}
+
+func histogram(bytes []byte, count []uint32) {
+	// build a byte histogram
+	for i := range len(count) {
+		count[i] = 0
+	}
 	for i := range len(bytes) {
-		val = bytes[i]
-		bytes[i] = sum
+		count[bytes[i]]++
+	}
+}
+
+func cumSum(count []uint32) {
+	// create cumulative sum
+	var (
+		sum uint32 = 0
+		val uint32
+	)
+	for i := range len(count) {
+		val = count[i]
+		count[i] = sum
 		sum += val
 	}
 }
 
-func initializeRank(s []uint8, rank, sa []int) int {
+func initializeRank(s []uint8, pos, rank, sa []uint32) uint32 {
+	// initialize ranks of rotations
+	// ranks are decided by count-sorting based on first character
 	var (
 		b byte
-		i int
+		i uint32
+		r uint32
 	)
-	count := histogram(s)  // get histogram
-	cumSum(count)          // get cumulative sum
-	for i = range len(s) { // build count-sorted array
-		b = s[i]         // for each letter
-		sa[count[b]] = i // place suffix start index i into SA bucket for byte b
-		count[b]++       // increment index for stability
+	// perform count-sort
+	histogram(s, pos)
+	cumSum(pos)
+	for i = range uint32(len(s)) {
+		b = s[i]       // for each letter
+		sa[pos[b]] = i // place suffix start index i into SA bucket for byte b
+		pos[b]++       // increment index of b in SA for stability
 	}
+	// assign new compact ranks (compress equal keys)
 	rank[sa[0]] = 0
-	r := 1
-	for i = 1; i < len(s); i++ {
+	r = 1
+	for i = 1; i < uint32(len(s)); i++ {
 		if s[sa[i]] != s[sa[i-1]] {
 			r++
 		}
@@ -52,28 +84,33 @@ func initializeRank(s []uint8, rank, sa []int) int {
 	return r
 }
 
-func sortBySecondKey(inSA, outSA, rank []int, k int, count []int) {
+func sortBySecondKey(inSA, outSA, rank, count []uint32, k uint32) {
+	// perform count-sort of SA based on ranks of second half of prefix for each suffix
 	var (
-		key int
-		i   int
-		j   int
+		key    uint32
+		length = uint32(len(inSA))
+		i      int
+		j      uint32
 	)
+	// wipe your histogram
 	for i = range len(count) {
-		count[i] = 0 // wipe your histogram
+		count[i] = 0
 	}
-	for i = range len(inSA) { // get histogram of ranks for second half of suffix prefix
+	// get histogram of ranks for second half of suffix prefix
+	for i = range len(inSA) {
 		j = inSA[i] + k
-		if j >= len(inSA) {
-			j -= len(inSA)
+		if j >= length {
+			j -= length // fast modulus
 		}
 		key = rank[j]
 		count[key]++
 	}
-	cumSum(count)             // get cumulative sum of histogram
-	for i = range len(inSA) { // count-sort suffix array by ranks
+	// perform count-sort
+	cumSum(count)
+	for i = range len(inSA) {
 		j = inSA[i] + k
-		if j >= len(inSA) {
-			j -= len(inSA) // fast modulus
+		if j >= length {
+			j -= length // fast modulus
 		}
 		key = rank[j]
 		outSA[count[key]] = inSA[i]
@@ -81,123 +118,165 @@ func sortBySecondKey(inSA, outSA, rank []int, k int, count []int) {
 	}
 }
 
-func sortByFirstKey(inSA, outSA, rank []int, count []int) {
+func sortByFirstKey(inSA, outSA, rank, count []uint32) {
+	// perform count-sort of SA based on ranks of first half of prefix for each suffix
 	var (
-		key int
+		key uint32
 		i   int
 	)
+	// wipe your histogram
 	for i = range len(count) {
-		count[i] = 0 // wipe your histogram
+		count[i] = 0
 	}
-	for i = range len(inSA) { // get histogram of ranks for first half of suffix prefex
+	// get histogram of ranks for first half of suffix prefex
+	for i = range len(inSA) {
 		count[rank[inSA[i]]]++
 	}
-	cumSum(count)             // get cumulative sum of histogram
-	for i = range len(inSA) { // count-sort suffix array by ranks
-		key = int(rank[inSA[i]])
+	// perform count-sort
+	cumSum(count)
+	for i = range len(inSA) {
+		key = uint32(rank[inSA[i]])
 		outSA[count[key]] = inSA[i]
 		count[key]++
 	}
 }
 
-func buildCircularSuffixArray(s []byte) []int {
+func buildCircularSuffixArray(s []byte, pos, count, rank, tmpRank, sa, tmpsa []uint32) {
+	// create and lexicographically sort a circular suffix array
+	// sorting is done by a radix-sort on suffix prefix segments that grow by 2x per iteration
+	// each radix element sort is done using a count-sort algorithm
 	var (
-		count   = make([]int, len(s))         // scratch count sort slice to not re-allocate
-		sa      = make([]int, len(s))         // suffix array indexes
-		tmpsa   = make([]int, len(s))         // next iterations of radix sorted suffix array indexes
-		rank    = make([]int, len(s))         // sorted ranking of suffix array indexes
-		tmpRank = make([]int, len(s))         // next iteration of sorted ranking of suffix array indexes
-		maxRank = initializeRank(s, rank, sa) // highest rank achieved per sort
-		newr    int                           // next iteration highest rank achieved
-		prev    int                           // temp suffix
-		cur     int                           // temp suffix
-		prevA   int                           // temp ranks
-		curA    int                           // temp ranks
-		prevB   int                           // temp ranks
-		curB    int                           // temp ranks
-		k       = 1                           // suffix prefix length
-		i       int                           // iterator variable
+		maxRank = initializeRank(s, pos, rank, sa) // highest rank achieved per sort
+		length  = uint32(len(s))
+		newRank uint32
+		prev    uint32
+		cur     uint32
+		prevA   uint32
+		curA    uint32
+		prevB   uint32
+		curB    uint32
+		i       uint32
 	)
-	for k < len(s) && maxRank < len(s) {
-		sortBySecondKey(sa, tmpsa, rank, k, count[:maxRank+1]) // radix sort suffix array by second key rank[i + k]
-		sa, tmpsa = tmpsa, sa                                  // save it off
-		sortByFirstKey(sa, tmpsa, rank, count[:maxRank+1])     // radix sort suffix array by first key rank[i]
-		sa, tmpsa = tmpsa, sa                                  // save it off
+	// iteratively sort until either:
+	// 1. you reach the max length of the suffixes (k == length)
+	// 2. every suffix has a unique rank (maxRank == length)
+	for k := uint32(1); k < length && maxRank < length; k *= 2 {
+		// perform radix sort on second and first suffix prefix
+		sortBySecondKey(sa, tmpsa, rank, count[:maxRank], k)
+		sa, tmpsa = tmpsa, sa
+		sortByFirstKey(sa, tmpsa, rank, count[:maxRank])
+		sa, tmpsa = tmpsa, sa
+		// determine new ranks of suffix array elements
 		tmpRank[sa[0]] = 0
-		newr = 1
-		for i = 1; i < len(s); i++ { // loop through the suffixes
+		newRank = 1
+		for i = 1; i < length; i++ {
 			prev = sa[i-1]     // previous element
 			cur = sa[i]        // current element
-			prevA = rank[prev] // previous element ranking
-			curA = rank[cur]   // current element ranking
+			prevA = rank[prev] // previous first key element ranking
+			curA = rank[cur]   // current first ke element ranking
 			prev += k
-			if prev >= len(s) {
-				prev -= len(s) // fast modulus
+			if prev >= length {
+				prev -= length // fast modulus
 			}
-			prevB = rank[prev]
-			curB = rank[(cur+k)%len(s)]
-			if (prevA != curA) || (prevB != curB) { // if they are not equal in rank
-				newr += 1 // new max rank is increased
+			prevB = rank[prev] // previous second key element ranking
+			if cur+k >= length {
+				curB = rank[(cur+k)-length]
+			} else {
+				curB = rank[cur+k] // current second key element ranking
 			}
-			tmpRank[cur] = newr - 1
+			// count unique ranks
+			if (prevA != curA) || (prevB != curB) {
+				newRank += 1
+			}
+			tmpRank[cur] = newRank - 1
 		}
-		rank, tmpRank = tmpRank, rank // save off the newly calculated ranks
-		maxRank = newr                // save off the new max rank
-		k *= 2                        // double the suffix prefix length
+		rank, tmpRank = tmpRank, rank
+		maxRank = newRank
 	}
-	return sa
 }
 
 func (BWTCodec) EncodeBlock(src []byte) ([]byte, error) {
+	// encode src using the burrows-wheeler transform (BWT)
 	if len(src) == 0 {
 		return src, nil
 	}
 	var (
-		outBytes        = make([]byte, len(src), len(src)+8)
-		primary  uint64 = 0 // row of original/unrotated data in sorted suffix array
-		sa              = buildCircularSuffixArray(src)
-		p        int
+		out            = make([]byte, len(src), len(src)+4) // output
+		primary uint32 = 0                                  // row of unrotated data in sorted suffix array
+		length  uint32 = uint32(len(src))                   // length of input
+		p       uint32                                      // index of suffix
+		prev    uint32                                      // index of last element in rotation
 	)
-	for i := range len(src) {
-		p = sa[i]                                  // get the current suffix
-		outBytes[i] = src[(p-1+len(src))%len(src)] // save the element prior to the start of that suffix
+	// instantiate the workspace
+	ws := bwtPool.Get().(*bwtWorkspace)
+	defer bwtPool.Put(ws)
+	ws.sa = grow32(ws.sa, len(src))
+	ws.tmpsa = grow32(ws.tmpsa, len(src))
+	ws.rank = grow32(ws.rank, len(src))
+	ws.tmpRank = grow32(ws.tmpRank, len(src))
+	ws.count = grow32(ws.count, len(src))
+	ws.pos = grow32(ws.pos, 256)
+	// build the sorted circular suffix array
+	buildCircularSuffixArray(src, ws.pos, ws.count, ws.rank, ws.tmpRank, ws.sa, ws.tmpsa)
+	// loop through each sorted circular suffix and grab the last element
+	for i := range length {
+		p = ws.sa[i]
 		if p == 0 {
-			primary = uint64(i) // if you are at 0 in SA (whole input) you found your primary index
+			prev = length - 1
+		} else {
+			prev = p - 1
+		}
+		out[i] = src[prev]
+		if p == 0 {
+			primary = uint32(i)
 		}
 	}
-	outBytes = binary.BigEndian.AppendUint64(outBytes, primary) // save 8 byte big-endian primary to tail of data
-	return outBytes, nil
+	// save off the 4-byte big-endian primary to the tail
+	out = binary.BigEndian.AppendUint32(out, primary)
+	return out, nil
 }
 
 func (BWTCodec) DecodeBlock(src []byte) ([]byte, error) {
+	// decode src using the inverse burrows-wheeler transform
 	if len(src) == 0 {
 		return src, nil
 	}
-	primary := int(binary.BigEndian.Uint64(src[len(src)-8:])) // decode the primary value
-	src = src[:len(src)-8]                                    // chop off the primary value
-	if primary >= len(src) {
+	// instantiate the workspace
+	ws := bwtPool.Get().(*bwtWorkspace)
+	defer bwtPool.Put(ws)
+	ws.next = grow32(ws.next, len(src)) // last column to first column mapping array
+	ws.pos = grow32(ws.pos, 256)        // count sort slice
+	// check for primary value
+	if len(src) < 4 {
+		return []byte{}, sqerr.New(sqerr.Corrupt, "BWT is missing primary value")
+	}
+	// grab the primary value and chop it off the source
+	primary := uint32(binary.BigEndian.Uint32(src[len(src)-4:]))
+	src = src[:len(src)-4]
+	if primary >= uint32(len(src)) {
 		return []byte{}, sqerr.New(sqerr.Corrupt, "Primary BWT value is too large")
 	}
-	count := histogram(src) // get the histogram
-	cumSum(count)           // get the cumulative sum (prefix sums)
+	// build the count array (cumulative sum)
+	histogram(src, ws.pos)
+	cumSum(ws.pos)
 	var (
-		outBytes = make([]byte, len(src)) // make an output slice
-		seen     = make([]int, 256)       // helper for counting element occurrences
-		occ      = make([]int, len(src))  // previous occurrence count for elements
-		i        int
-		b        byte
+		out    = make([]byte, len(src)) // make an output slice
+		length = uint32(len(src))
+		i      uint32
+		b      byte
 	)
-	for i = range len(occ) { // this keep track of how many times we've seen each element so far
-		b = src[i] // essentially generate a running histogram
-		occ[i] = seen[b]
-		seen[b]++
+	// build stable count mapping for last column to first column
+	for i = range length {
+		b = src[i]
+		ws.next[ws.pos[b]] = i
+		ws.pos[b]++
 	}
-	for i = len(src) - 1; i >= 0; i-- { // start at the primary row
-		b = src[primary]                  // get the current byte
-		outBytes[i] = b                   // build it into your output
-		primary = count[b] + occ[primary] // step back one rotation
+	// traverse last-first mapping starting with primary
+	for i = range length {
+		primary = ws.next[primary]
+		out[i] = src[primary]
 	}
-	return outBytes, nil
+	return out, nil
 }
 
 func (BWTCodec) IsLossless() bool {

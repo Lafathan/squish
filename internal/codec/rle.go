@@ -1,5 +1,7 @@
 package codec
 
+import "squish/internal/sqerr"
+
 const (
 	maxRunLength uint8   = 255  // max run length
 	tolAlpha     float64 = 0.15 // tolerance sigma decay
@@ -23,31 +25,6 @@ type RLTolerance struct {
 	count     []int     // current run length of candidate
 }
 
-func absByteDiff(a, b byte) byte {
-	if a >= b {
-		return a - b
-	}
-	return b - a
-}
-
-func equalSlice(slice1 []byte, slice2 []byte, tol []float64) bool {
-	// element-wise slice comparison
-	if len(slice1) != len(slice2) {
-		return false
-	}
-	for i := range len(slice1) { // loop through slice elements
-		if float64(absByteDiff(slice1[i], slice2[i])) > tol[i] { // the diff is greater than tolerance
-			return false // they are not equal
-		}
-	}
-	return true
-}
-
-func clampFloat(f, lo, hi float64) float64 {
-	f = max(f, lo)    // clamp the max
-	return min(f, hi) // clamp the min
-}
-
 func newTolerance(n int) *RLTolerance {
 	return &RLTolerance{
 		anchor:    make([]byte, n),
@@ -58,30 +35,63 @@ func newTolerance(n int) *RLTolerance {
 	}
 }
 
+func absByteDiff(a, b byte) byte {
+	// absolute value byte difference
+	if a >= b {
+		return a - b
+	}
+	return b - a
+}
+
+func equalSliceWithinTolerance(slice1 []byte, slice2 []byte, tol []float64) bool {
+	// element-wise slice comparison
+	if len(slice1) != len(slice2) {
+		return false
+	}
+	for i := range len(slice1) {
+		if float64(absByteDiff(slice1[i], slice2[i])) > tol[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func clampFloat(f, lo, hi float64) float64 {
+	// clamp a float to within a min and max
+	f = max(f, lo)
+	return min(f, hi)
+}
+
 func (t *RLTolerance) updateTolerance(data []byte) {
+	// update tolerances based on new data point
 	var (
-		res byte
-		tol float64
+		residual byte
+		tol      float64
 	)
-	for i := range len(t.tolerance) { // loop through the bytes
-		res = absByteDiff(t.anchor[i], data[i])                      // get a residual of new data
-		t.sigma[i] = (1-tolAlpha)*t.sigma[i] + tolAlpha*float64(res) // calculate sigma
-		tol = tolMin + tolK*t.sigma[i]                               // calculate the new tolerance
-		t.tolerance[i] = clampFloat(tol, tolMin, tolMax)             // clamp it
-		if float64(res) <= t.tolerance[i] {
-			if absByteDiff(t.candidate[i], data[i]) <= tolBand { // if candidate residual is in valid band
-				t.count[i]++ // keep track of repeats of new candidate anchor
+	for i := range len(t.tolerance) {
+		// calculate the new tolerance based on a residuals
+		residual = absByteDiff(t.anchor[i], data[i])
+		t.sigma[i] = (1-tolAlpha)*t.sigma[i] + tolAlpha*float64(residual)
+		tol = tolMin + tolK*t.sigma[i]
+		t.tolerance[i] = clampFloat(tol, tolMin, tolMax)
+		// track and update candidate for new anchor values
+		if float64(residual) <= t.tolerance[i] {
+			// track repeats of valid candidates
+			if absByteDiff(t.candidate[i], data[i]) <= tolBand {
+				t.count[i]++
 			} else {
-				t.candidate[i] = data[i] // new candidate observed
-				t.count[i] = 1           // reset the count
+				t.candidate[i] = data[i]
+				t.count[i] = 1
 			}
-			if t.count[i] >= int(tolHang) { // if there are enough of the candidate anchor
-				t.anchor[i] = t.candidate[i] // replace the anchor
+			// choose a new anchor if candidate repeats enough
+			if t.count[i] >= int(tolHang) {
+				t.anchor[i] = t.candidate[i]
 				t.count[i] = 0
 			}
 		} else {
-			t.anchor[i] = data[i] // if the residual is way outside the window
-			t.sigma[i] = 0        // pick the new anchor and reset everything
+			// pick a new anchor if residual is way outside of the window
+			t.anchor[i] = data[i]
+			t.sigma[i] = 0
 			t.candidate[i] = data[i]
 			t.count[i] = 0
 			t.tolerance[i] = tolMin
@@ -90,16 +100,20 @@ func (t *RLTolerance) updateTolerance(data []byte) {
 }
 
 func encodeUpdateGroup(runLen uint8, flagByte *byte, flagBit uint8, runBytes []byte, groupBytes *[]byte) {
-	if runLen >= 2 { // only replace when you have a run (minumum of 2)
-		*flagByte |= (1 << flagBit)                    // set the flag bit based on run length
-		*groupBytes = append(*groupBytes, runLen)      // write the run length if it is not a literal
-		*groupBytes = append(*groupBytes, runBytes...) // write the literal (runs and single literals)
+	// update group associated with current flag byte
+	if runLen >= 2 {
+		// update the current flag bit to represent a run, then append the length and the literal bytes
+		*flagByte |= (1 << flagBit)
+		*groupBytes = append(*groupBytes, runLen)
+		*groupBytes = append(*groupBytes, runBytes...)
 	} else {
-		*groupBytes = append(*groupBytes, runBytes...) // write the literal (runs and single literals)
+		// no need to update the flag bit (defaults to 0), then append the literal bytes
+		*groupBytes = append(*groupBytes, runBytes...)
 	}
 }
 
 func (RC RLECodec) EncodeBlock(src []byte) ([]byte, error) {
+	// encode src using run-length encoding
 	if len(src) == 0 {
 		return src, nil
 	}
@@ -111,57 +125,70 @@ func (RC RLECodec) EncodeBlock(src []byte) ([]byte, error) {
 		groupBytes []byte       = make([]byte, 0, 8*(RC.byteLength+1)) // current set of encoded bytes
 		srcIdx     int          = 0                                    // index as you traverse the source
 		srcBytes   []byte       = nil                                  // current bytes from the source
-		tolerance  *RLTolerance = newTolerance(RC.byteLength)          // noise and tolerance calculations
-		outBytes   []byte       = make([]byte, 0, len(src)*9/8)        // encoded bytes
+		tol        *RLTolerance = newTolerance(RC.byteLength)          // noise and tolerance calculations
+		out        []byte       = make([]byte, 0, len(src)*9/8)        // encoded bytes
 	)
 	for srcIdx < len(src) {
 		srcBytes = src[srcIdx:min(srcIdx+RC.byteLength, len(src))]
 		if !RC.IsLossless() && len(srcBytes) == RC.byteLength {
-			tolerance.updateTolerance(srcBytes)
+			tol.updateTolerance(srcBytes)
 		}
 		srcIdx += len(srcBytes)
-		if runBytes == nil { // if no run has been set yet
-			runBytes = srcBytes // set the run to the current source bytes
-			runLen = 1          // you have a run of length 1
-		} else if equalSlice(runBytes, srcBytes, tolerance.tolerance) && runLen < maxRunLength {
-			runLen++ // if the next source bytes are "equal" to the run bytes, count it
-		} else { // if they are not equal
+		if runBytes == nil {
+			// initialize if necessary
+			runBytes = srcBytes
+			runLen = 1
+		} else if equalSliceWithinTolerance(runBytes, srcBytes, tol.tolerance) && runLen < maxRunLength {
+			// increment the run
+			runLen++
+		} else {
+			// update group
 			encodeUpdateGroup(runLen, &flagByte, flagBit, runBytes, &groupBytes)
-			if flagBit == 0 { // if you are at the end of your flag
-				outBytes = append(outBytes, flagByte) // write the current group
-				outBytes = append(outBytes, groupBytes...)
-				groupBytes = groupBytes[:0] // reset for the next group
-				flagBit = 7                 // reset the flag bit and byte
+			// update output and start a new flag byte if you run out of flag bits
+			if flagBit == 0 {
+				out = append(out, flagByte)
+				out = append(out, groupBytes...)
+				groupBytes = groupBytes[:0]
+				flagBit = 7
 				flagByte = 0x00
 			} else {
 				flagBit--
 			}
-			runBytes = srcBytes // reset what you are matching against
+			runBytes = srcBytes
 			runLen = 1
 		}
-		if srcIdx >= len(src) { // trailing match, write ramaining length + literals
+		// trailing match, write remaining length and literals
+		if srcIdx >= len(src) {
 			encodeUpdateGroup(runLen, &flagByte, flagBit, runBytes, &groupBytes)
-			outBytes = append(outBytes, flagByte)
-			outBytes = append(outBytes, groupBytes...)
+			out = append(out, flagByte)
+			out = append(out, groupBytes...)
 		}
 	}
-	return outBytes, nil
+	return out, nil
 }
 
-func decodeGetFlagAndRunLength(flagByte *byte, flagBit uint8, runLen *int, srcIdx *int, src []byte) {
-	if flagBit == 7 { // if you just reset the flag bit
-		*flagByte = src[*srcIdx] // get a new flag byte
-		*srcIdx++                // move forward
+func decodeGetFlagAndRunLength(flagByte *byte, flagBit uint8, runLen *int, srcIdx *int, src []byte) error {
+	// grab the current flag bit, read a new flag if necessary, and update to the next run length
+	if flagBit == 7 {
+		// read a new flag bit if necessary
+		*flagByte = src[*srcIdx]
+		*srcIdx++
 	}
-	if *flagByte&(1<<flagBit) > 0 { // if you come across a run
-		*runLen = int(src[*srcIdx]) // grab the run length
+	if *srcIdx > len(src) {
+		return sqerr.New(sqerr.Corrupt, "RLE encounterd early EOS")
+	}
+	// read the next run length if flag bit informs of run length
+	if *flagByte&(1<<flagBit) > 0 {
+		*runLen = int(src[*srcIdx])
 		*srcIdx++
 	} else {
 		*runLen = 1 // otherwise it is just a single literal
 	}
+	return nil
 }
 
 func (RC RLECodec) DecodeBlock(src []byte) ([]byte, error) {
+	// decode src using run-length decoding
 	if len(src) == 0 {
 		return src, nil
 	}
@@ -174,10 +201,11 @@ func (RC RLECodec) DecodeBlock(src []byte) ([]byte, error) {
 		outLength = 0         // first pass variable for allocating for decoding
 		flush     = false     // whether or not you are at the end
 	)
+	// first pass for allocating output length
 	for srcIdx < len(src) {
 		decodeGetFlagAndRunLength(&flagByte, flagBit, &runLen, &srcIdx, src)
-		outLength += runLen * RC.byteLength // increment the length by the run * width
-		srcIdx += RC.byteLength             // increment past the literal
+		outLength += runLen * RC.byteLength
+		srcIdx += RC.byteLength
 		if srcIdx >= len(src) {
 			break
 		}
@@ -187,17 +215,19 @@ func (RC RLECodec) DecodeBlock(src []byte) ([]byte, error) {
 			flagBit--
 		}
 	}
-	outBytes := make([]byte, 0, outLength)
+	// make output and reset variable
+	out := make([]byte, 0, outLength)
 	srcIdx = 0
 	flagBit = 7
 	runLen = 1
+	// second pass to actually decode
 	for srcIdx < len(src) {
 		decodeGetFlagAndRunLength(&flagByte, flagBit, &runLen, &srcIdx, src)
-		runBytes = src[srcIdx:min((srcIdx+RC.byteLength), len(src))] // get the bytes repeated
+		runBytes = src[srcIdx:min((srcIdx+RC.byteLength), len(src))]
 		for range runLen {
-			outBytes = append(outBytes, runBytes...)
+			out = append(out, runBytes...)
 		}
-		srcIdx += len(runBytes) // increment past the literal
+		srcIdx += len(runBytes)
 		if len(runBytes) < RC.byteLength || srcIdx >= len(src) {
 			flush = true // flush if literal was not full length (RC.byteLength)
 		}
@@ -210,7 +240,7 @@ func (RC RLECodec) DecodeBlock(src []byte) ([]byte, error) {
 			flagBit--
 		}
 	}
-	return outBytes, nil
+	return out, nil
 }
 
 func (RC RLECodec) IsLossless() bool {
