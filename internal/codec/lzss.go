@@ -1,6 +1,9 @@
 package codec
 
-import "squish/internal/sqerr"
+import (
+	"squish/internal/sqerr"
+	"sync"
+)
 
 const (
 	maxLookBack  = 1<<12 - 1              // 4095 - how far back to look for matches
@@ -11,6 +14,19 @@ const (
 )
 
 type LZSSCodec struct{}
+
+type lzssWorkspace struct {
+	head       [hashSize]int        // most recent match of hashed 3-byte sequence
+	prev       [maxLookBack + 1]int // previous matches
+	groupBytes []byte               // current values corresponding to the current flag byte
+}
+
+var lzssPool = sync.Pool{
+	// creates a new workspace
+	New: func() any {
+		return &lzssWorkspace{}
+	},
+}
 
 func balanceBytes(lookBack int, runLen int) []byte {
 	// combine lookback and run length into two byte representation with 12 bits for lookback and 4 bits for run length
@@ -38,11 +54,8 @@ func hashBytes(bytes []byte) int {
 func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
 	// encode src using the Lempel–Ziv–Storer–Szymanski algorithm
 	var (
-		head         [hashSize]int        // most recent match of hashed 3-byte sequence
-		prev         [maxLookBack + 1]int // previous matches
 		out          = make([]byte, 0, len(src)*9/8)
 		srcIdx       = 0
-		groupBytes   = make([]byte, 0, 16) // current values corresponding to the current flag byte
 		flagIdx      int
 		flagByte     byte
 		hash         int // hash of the current minMatchLen bytes
@@ -53,18 +66,21 @@ func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
 		iterations   int // number of iterations of checking matches
 		lookBackIdx  int // index of the lookback window start
 	)
+	// instantiate your workspace
+	ws := lzssPool.Get().(*lzssWorkspace)
+	defer lzssPool.Put(ws)
 	// set all your matches to -1, meaning no-match
-	for i := range len(head) {
-		head[i] = -1
+	for i := range len(ws.head) {
+		ws.head[i] = -1
 	}
-	for i := range len(prev) {
-		prev[i] = -1
+	for i := range len(ws.prev) {
+		ws.prev[i] = -1
 	}
 	for srcIdx < len(src) {
 		// make a new flag byte and associated group of match
 		flagIdx = 7
 		flagByte = 0
-		groupBytes = groupBytes[:0]
+		ws.groupBytes = ws.groupBytes[:0]
 		for flagIdx >= 0 {
 			// break out early if you run out of data before finishing a flag byte
 			if srcIdx >= len(src) {
@@ -76,16 +92,20 @@ func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
 				// use that hash to get the most recent potential match of that same hash using the head array
 				iterations = 0
 				hash = hashBytes(src[srcIdx : srcIdx+minMatchLen])
-				curMatchIdx = head[hash]
+				curMatchIdx = ws.head[hash]
 				lookBackIdx = max(0, srcIdx-maxLookBack)
 				// if no match, then loop through the prev array looking at previous matches of that hash
 				// repeat until a match is found or the search expires (iterations -> maxMatchIter)
 				for curMatchIdx != -1 && curMatchIdx >= lookBackIdx && iterations < maxMatchIter {
 					// while there is a match and it is within the lookback window and you are under the max match checks
 					curMatchLen = 0
-					for curMatchLen < maxMatchLen && curMatchIdx < srcIdx && src[curMatchIdx+curMatchLen] == src[srcIdx+curMatchLen] {
-						// while still matching, the match isn't too long, and the match doesn't overlap with hashed bytes
+					for curMatchLen < maxMatchLen && src[curMatchIdx+curMatchLen] == src[srcIdx+curMatchLen] {
+						// while still matching and the match isn't too long
 						curMatchLen++
+						// break out if the match reached the end of the input or overlaps with current hashed bytes
+						if srcIdx+curMatchLen >= len(src) || curMatchIdx+curMatchLen < srcIdx {
+							break
+						}
 					}
 					// save it off if the match ends and it is the best encountered so far
 					if curMatchLen >= minMatchLen && curMatchLen > bestMatchLen {
@@ -95,7 +115,7 @@ func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
 							break
 						}
 					}
-					curMatchIdx = prev[curMatchIdx%(maxLookBack+1)]
+					curMatchIdx = ws.prev[curMatchIdx%(maxLookBack+1)]
 					iterations++
 				}
 			}
@@ -103,25 +123,25 @@ func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
 			start := srcIdx
 			if bestMatchLen >= minMatchLen {
 				flagByte |= (1 << flagIdx)
-				groupBytes = append(groupBytes, balanceBytes(bestMatchIdx, bestMatchLen)...)
+				ws.groupBytes = append(ws.groupBytes, balanceBytes(bestMatchIdx, bestMatchLen)...)
 				srcIdx += bestMatchLen
 			} else {
-				groupBytes = append(groupBytes, src[srcIdx]) // add the literal
-				srcIdx++                                     // increment where you are in the source data
+				ws.groupBytes = append(ws.groupBytes, src[srcIdx]) // add the literal
+				srcIdx++                                           // increment where you are in the source data
 			}
 			// update head and prev arrays with skipped byte hashes
 			end := srcIdx
 			for k := start; k < end; k++ {
 				if minMatchLen+k <= len(src) {
 					hash = hashBytes(src[k : k+minMatchLen])
-					prev[k%(maxLookBack+1)] = head[hash]
-					head[hash] = k
+					ws.prev[k%(maxLookBack+1)] = ws.head[hash]
+					ws.head[hash] = k
 				}
 			}
 			flagIdx--
 		}
 		out = append(out, flagByte)
-		out = append(out, groupBytes...)
+		out = append(out, ws.groupBytes...)
 	}
 	return out, nil
 }

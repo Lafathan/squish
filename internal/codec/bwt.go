@@ -9,13 +9,13 @@ import (
 type BWTCodec struct{}
 
 type bwtWorkspace struct {
-	sa      []uint32
-	tmpsa   []uint32
-	rank    []uint32
-	tmpRank []uint32
-	count   []uint32
+	sa      []uint32 // suffix array indexes to be sorted
+	tmpsa   []uint32 // next iterations of radix sorted suffix array indexes
+	rank    []uint32 // ranking of suffix array indexes
+	tmpRank []uint32 // next iteration of sorted rankings of suffix array indexes
+	count   []uint32 // scratch count sort slice to not re-allocate
+	pos     []uint32 // scratch count sort slice for byte values
 	next    []uint32
-	pos     []uint32
 }
 
 var bwtPool = sync.Pool{
@@ -141,12 +141,12 @@ func sortByFirstKey(inSA, outSA, rank, count []uint32) {
 	}
 }
 
-func buildCircularSuffixArray(s []byte, ws *bwtWorkspace) {
+func buildCircularSuffixArray(s []byte, pos, count, rank, tmpRank, sa, tmpsa []uint32) {
 	// create and lexicographically sort a circular suffix array
 	// sorting is done by a radix-sort on suffix prefix segments that grow by 2x per iteration
 	// each radix element sort is done using a count-sort algorithm
 	var (
-		maxRank = initializeRank(s, ws.pos, ws.rank, ws.sa) // highest rank achieved per sort
+		maxRank = initializeRank(s, pos, rank, sa) // highest rank achieved per sort
 		length  = uint32(len(s))
 		newRank uint32
 		prev    uint32
@@ -162,35 +162,35 @@ func buildCircularSuffixArray(s []byte, ws *bwtWorkspace) {
 	// 2. every suffix has a unique rank (maxRank == length)
 	for k := uint32(1); k < length && maxRank < length; k *= 2 {
 		// perform radix sort on second and first suffix prefix
-		sortBySecondKey(ws.sa, ws.tmpsa, ws.rank, ws.count[:maxRank], k)
-		ws.sa, ws.tmpsa = ws.tmpsa, ws.sa
-		sortByFirstKey(ws.sa, ws.tmpsa, ws.rank, ws.count[:maxRank])
-		ws.sa, ws.tmpsa = ws.tmpsa, ws.sa
+		sortBySecondKey(sa, tmpsa, rank, count[:maxRank], k)
+		sa, tmpsa = tmpsa, sa
+		sortByFirstKey(sa, tmpsa, rank, count[:maxRank])
+		sa, tmpsa = tmpsa, sa
 		// determine new ranks of suffix array elements
-		ws.tmpRank[ws.sa[0]] = 0
+		tmpRank[sa[0]] = 0
 		newRank = 1
 		for i = 1; i < length; i++ {
-			prev = ws.sa[i-1]     // previous element
-			cur = ws.sa[i]        // current element
-			prevA = ws.rank[prev] // previous first key element ranking
-			curA = ws.rank[cur]   // current first ke element ranking
+			prev = sa[i-1]     // previous element
+			cur = sa[i]        // current element
+			prevA = rank[prev] // previous first key element ranking
+			curA = rank[cur]   // current first ke element ranking
 			prev += k
 			if prev >= length {
 				prev -= length // fast modulus
 			}
-			prevB = ws.rank[prev] // previous second key element ranking
+			prevB = rank[prev] // previous second key element ranking
 			if cur+k >= length {
-				curB = ws.rank[(cur+k)-length]
+				curB = rank[(cur+k)-length]
 			} else {
-				curB = ws.rank[cur+k] // current second key element ranking
+				curB = rank[cur+k] // current second key element ranking
 			}
 			// count unique ranks
 			if (prevA != curA) || (prevB != curB) {
 				newRank += 1
 			}
-			ws.tmpRank[cur] = newRank - 1
+			tmpRank[cur] = newRank - 1
 		}
-		ws.rank, ws.tmpRank = ws.tmpRank, ws.rank
+		rank, tmpRank = tmpRank, rank
 		maxRank = newRank
 	}
 }
@@ -207,15 +207,17 @@ func (BWTCodec) EncodeBlock(src []byte) ([]byte, error) {
 		p       uint32                                      // index of suffix
 		prev    uint32                                      // index of last element in rotation
 	)
+	// instantiate the workspace
 	ws := bwtPool.Get().(*bwtWorkspace)
 	defer bwtPool.Put(ws)
-	ws.sa = grow32(ws.sa, len(src))           // suffix array indexes to be sorted
-	ws.tmpsa = grow32(ws.tmpsa, len(src))     // next iterations of radix sorted suffix array indexes
-	ws.rank = grow32(ws.rank, len(src))       // ranking of suffix array indexes
-	ws.tmpRank = grow32(ws.tmpRank, len(src)) // next iteration of sorted rankings of suffix array indexes
-	ws.count = grow32(ws.count, len(src))     // scratch count sort slice to not re-allocate
-	ws.pos = grow32(ws.pos, 256)              // scratch count sort slice for byte values
-	buildCircularSuffixArray(src, ws)         // sorted circular suffix array
+	ws.sa = grow32(ws.sa, len(src))
+	ws.tmpsa = grow32(ws.tmpsa, len(src))
+	ws.rank = grow32(ws.rank, len(src))
+	ws.tmpRank = grow32(ws.tmpRank, len(src))
+	ws.count = grow32(ws.count, len(src))
+	ws.pos = grow32(ws.pos, 256)
+	// build the sorted circular suffix array
+	buildCircularSuffixArray(src, ws.pos, ws.count, ws.rank, ws.tmpRank, ws.sa, ws.tmpsa)
 	// loop through each sorted circular suffix and grab the last element
 	for i := range length {
 		p = ws.sa[i]
@@ -239,11 +241,11 @@ func (BWTCodec) DecodeBlock(src []byte) ([]byte, error) {
 	if len(src) == 0 {
 		return src, nil
 	}
-	// instantiate your workspace
+	// instantiate the workspace
 	ws := bwtPool.Get().(*bwtWorkspace)
 	defer bwtPool.Put(ws)
-	ws.pos = grow32(ws.pos, 256)
-	ws.next = grow32(ws.next, len(src))
+	ws.next = grow32(ws.next, len(src)) // last column to first column mapping array
+	ws.pos = grow32(ws.pos, 256)        // count sort slice
 	// check for primary value
 	if len(src) < 4 {
 		return []byte{}, sqerr.New(sqerr.Corrupt, "BWT is missing primary value")

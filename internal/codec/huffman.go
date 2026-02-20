@@ -272,7 +272,7 @@ func (HUFFMANCodec) DecodeBlock(src []byte) ([]byte, error) {
 		padBuffer uint64
 		newBit    uint64
 	)
-	// create a buffer to holding padded bits, so you don't accidentally process them as huffman codes
+	// create a buffer to hold padded bits, so you don't accidentally process them as huffman codes
 	// padBuffer acts as a buffer between what's read in and what's decoded
 	// so when you get to the end of the stream, it will be holding all padding bits
 	if padBits > 0 {

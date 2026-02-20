@@ -7,7 +7,7 @@ type MTFCodec struct{}
 func getAlphabet() *list.List {
 	// build a doubly linked list for an byte alphabet
 	alphabet := list.New()
-	for i := range 255 {
+	for i := range 256 {
 		alphabet.PushFront(byte(i))
 	}
 	return alphabet
