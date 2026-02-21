@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"bytes"
 	"squish/internal/codec"
 	"squish/internal/frame"
 	"strings"
@@ -53,4 +54,14 @@ func TestEmptySrc(t *testing.T) {
 func TestPartialLastBlock(t *testing.T) {
 	message := "Hello World!"
 	testHelper(t, message, []uint8{codec.HUFFMAN}, 10, frame.NoChecksum)
+}
+
+func TestMultiBlock(t *testing.T) {
+	message := []byte{0, 1}
+	a, b := 1, 1
+	for i := range 30 {
+		a, b = b, a+b
+		message = append(message, bytes.Repeat([]byte{byte(i)}, b)...)
+	}
+	testHelper(t, string(message), []uint8{codec.LZSS}, 100000, frame.NoChecksum)
 }
