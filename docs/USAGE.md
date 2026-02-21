@@ -45,7 +45,6 @@ Squish does *not* currently aim to:
 ### From source
 ```bash
 go build ./cmd/squish
-./squish -version
 ./squish -help
 ```
 ## Quickstart

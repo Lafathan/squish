@@ -63,5 +63,5 @@ func TestMultiBlock(t *testing.T) {
 		a, b = b, a+b
 		message = append(message, bytes.Repeat([]byte{byte(i)}, b)...)
 	}
-	testHelper(t, string(message), []uint8{codec.LZSS}, 100000, frame.NoChecksum)
+	testHelper(t, string(message), []uint8{codec.BWT, codec.MTF, codec.ZRLE, codec.LZSS, codec.HUFFMAN}, 100000, frame.NoChecksum)
 }

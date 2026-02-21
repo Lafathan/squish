@@ -7,49 +7,79 @@ import (
 	"squish/internal/codec"
 	"squish/internal/frame"
 	"squish/internal/sqerr"
+	"sync"
 )
 
+type decodeWorkspace struct {
+	data []byte
+}
+
+var decodePool = sync.Pool{
+	// creates a new workspace
+	New: func() any {
+		return &decodeWorkspace{}
+	},
+}
+
+func growB(slice []byte, length int) []byte {
+	// function to grow slices
+	if cap(slice) < length {
+		return make([]byte, length)
+	}
+	return slice[:length]
+}
+
 func Decode(src io.Reader, dst io.Writer) error {
-	fr := frame.NewFrameReader(src)    // instantiate a FrameReader
-	if err := fr.Ready(); err != nil { // read in the header of the stream
+	// read the header
+	fr := frame.NewFrameReader(src)
+	if err := fr.Ready(); err != nil {
 		return sqerr.CodedError(err, sqerr.ReadErrorCode(err), "failed to read input header")
 	}
 	for {
+		// loop through reading each block
 		block, payload, err := fr.Next()
 		if err != nil {
 			return sqerr.CodedError(err, sqerr.ReadErrorCode(err), "failed to read input block")
 		}
-		if block.BlockType == frame.EOS { // break if you reached the EOS
+		// break if you reach EOS
+		if block.BlockType == frame.EOS {
 			break
 		}
-		data := make([]byte, block.CSize)
-		n, err := io.ReadFull(payload, data)
+		// instantiate a workspace
+		ws := decodePool.Get().(*decodeWorkspace)
+		ws.data = growB(ws.data, int(block.CSize))
+		// read the block
+		n, err := io.ReadFull(payload, ws.data)
 		if err != nil {
 			return sqerr.CodedError(err, sqerr.ReadErrorCode(err), "failed to read input block")
 		}
+		// verify compressed size
 		if n != int(block.CSize) {
-			return sqerr.CodedError(err, sqerr.Corrupt, fmt.Sprintf("mismatched compressed payload size: got %d - expected %d", len(data), block.CSize))
+			return sqerr.CodedError(err, sqerr.Corrupt, fmt.Sprintf("mismatched compressed payload size: got %d - expected %d", len(ws.data), block.CSize))
 		}
+		// verify checksums
 		blockCS := block.Checksum
 		if fr.Header.ChecksumMode&frame.CompressedChecksum > 0 {
-			csm := uint64(crc32.ChecksumIEEE(data))
+			csm := uint64(crc32.ChecksumIEEE(ws.data))
 			exp := (1<<(8*crc32.Size) - 1) & blockCS
 			if csm != exp {
 				return sqerr.New(sqerr.Corrupt, fmt.Sprintf("mismatched compressed payload checksum: got %08x - expected %08x", csm, exp))
 			}
 			blockCS = blockCS >> (8 * crc32.Size)
 		}
+		// apply block level codecs if necessary
 		codecList := fr.Header.Codec
 		if block.BlockType == frame.BlockCodec {
 			codecList = block.Codec
 		}
 		lossless := true
+		// apply the codecs in reverse
 		for i := range len(codecList) {
-			currentCodec, ok := codec.CodecMap[codecList[len(codecList)-1-i]] // determine the codec to use
+			currentCodec, ok := codec.CodecMap[codecList[len(codecList)-1-i]]
 			if !ok {
 				return sqerr.New(sqerr.Unsupported, "unsupported codec ID")
 			}
-			data, err = currentCodec.DecodeBlock(data) // decode it
+			ws.data, err = currentCodec.DecodeBlock(ws.data)
 			if err != nil {
 				return sqerr.CodedError(err, sqerr.Corrupt, "failed to decode block")
 			}
@@ -57,20 +87,24 @@ func Decode(src io.Reader, dst io.Writer) error {
 				lossless = false
 			}
 		}
+		// verify checksums if there was no lossy compression
 		if fr.Header.ChecksumMode&frame.UncompressedChecksum > 0 && lossless {
-			csm := uint64(crc32.ChecksumIEEE(data))
+			csm := uint64(crc32.ChecksumIEEE(ws.data))
 			exp := (1<<(8*crc32.Size) - 1) & blockCS
 			if csm != exp {
 				return sqerr.New(sqerr.Corrupt, fmt.Sprintf("mismatched uncompressed payload checksum: got %08x - expected %08x", csm, exp))
 			}
 		}
-		out, err := dst.Write(data)              // write it out
-		if out != int(block.USize) && lossless { // verify the uncompressed payload size
+		// write the uncompressed data
+		out, err := dst.Write(ws.data)
+		// verify uncompressed size
+		if out != int(block.USize) && lossless {
 			return sqerr.New(sqerr.Corrupt, fmt.Sprintf("mismatched uncompressed payload size: got %d - expected %d", out, block.USize))
 		}
 		if err != nil {
 			return sqerr.CodedError(err, sqerr.IO, "failed to write output")
 		}
+		decodePool.Put(ws)
 	}
 	return nil
 }

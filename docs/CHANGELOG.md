@@ -1,6 +1,30 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-02-21
+
+Transforms + ZRLE!
+
+### Added
+- Move-To-Front Transform (MTF)
+- Burrows-Wheeler Transform (BWT)
+- Zero-Run-Length-Encoding (ZRLE)
+    + RLE optimized for runs of zeros - great after BWT-MTF
+
+### Changed 
+- Some codecs now use pooled memory workspaces drasticly improving performance
+- RLE now uses bit instructed processing vs. byte instructed
+    + Codec overhead is reduced by 87.5%
+    + NOT COMPATABLE with older versions
+- New tolerance algorithm for lossy RLE 
+    + Faster, less memory usage, more consistent predictable
+- Bitio reader and writer now use scratch memory improving performance in HUFFMAN
+
+### Fixed
+- RLE decoding first pass now properly allocates output size significantly reducing slice
+- Fixed indexing issue in LZSS that occasionally paniced for some data sets
+- Fixed duplicate help print for invalid CLI inputs
+
 ## [0.2.0] - 2026-01-31
 
 Automagic encoding is here!
@@ -18,7 +42,7 @@ Automagic encoding is here!
 ### Fixed
 - 20% less memory usage when decoding Huffman
 - Less memory usage for Run Length Encoding as well
-- Fixed not recognizing non-upper-case `deflate` codec.
+- Fixed not recognizing non-upper-case `deflate` codec
     
 ## [0.1.1] - 2026-01-25
 
