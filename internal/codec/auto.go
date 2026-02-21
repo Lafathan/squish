@@ -12,8 +12,9 @@ const (
 )
 
 var (
-	primaryRecipes    = []uint8{HUFFMAN, LZSS, RLE, RLE2, RLE3, RLE4}
-	subsequentRecipes = []uint8{HUFFMAN, LZSS}
+	transforms        = [][]uint8{{RAW}, {BWT, MTF}}
+	primaryRecipes    = []uint8{HUFFMAN, LZSS, RLE, RLE2, RLE3, RLE4, ZRLE}
+	subsequentRecipes = []uint8{HUFFMAN, LZSS, RLE, RAW}
 )
 
 type AUTOCodec struct {
@@ -21,76 +22,89 @@ type AUTOCodec struct {
 }
 
 type result struct {
-	codecIDs []uint8 // result for iteration to keep track of payload size and codecs used
+	codecIDs []uint8
 	payload  []byte
 }
 
 func getPayloadProbe(src []byte) []byte {
+	// get a smaller data set to compress for determining the best codecs
 	if len(src) < minProbeLen {
 		return src
 	}
-	probeLength := len(src) / 8                 // default to 1/8th of the source payload
-	probeLength = max(probeLength, minProbeLen) // clamp it on the low end
-	probeLength = min(probeLength, maxProbeLen) // clamp it on the high end
+	// default to 1/8 the block size and clamp it
+	probeLength := len(src) / 8
+	probeLength = max(probeLength, minProbeLen)
+	probeLength = min(probeLength, maxProbeLen)
 	if probeLength == len(src) {
-		return src // compress the entire payload if it is small
+		// compress the entire payload if it is small
+		return src
 	}
-	startIdx := (len(src) - probeLength) / 2 // take a chunk from the middle of the payload
+	// get the indexes so your data set is from the middle of the payload
+	startIdx := (len(src) - probeLength) / 2
 	endIdx := startIdx + probeLength
 	return src[startIdx:endIdx]
 }
 
 func getFilteredResults(results []result) []result {
+	// keep a limited number of the best results based on compressed payload size
 	sort.Slice(results, func(i, j int) bool {
 		return len(results[i].payload) < len(results[j].payload)
 	})
-	return results[:keepAlong] // keep the 'keepAlong' number of results into next iteration
+	return results[:keepAlong]
 }
 
 func (AC *AUTOCodec) EncodeBlock(src []byte) ([]byte, error) {
+	// determines a best-set of transforms and codecs to use and encodes the data
 	if len(src) == 0 {
 		return src, nil
 	}
 	var (
-		probe   []byte   = getPayloadProbe(src)                   // get the payload test chunk
-		results []result = make([]result, 0, len(primaryRecipes)) // make a slice to store results
+		probe      []byte   = getPayloadProbe(src)
+		results    []result = make([]result, 0, len(primaryRecipes)*len(transforms))
+		err        error
+		resPayload []byte
 	)
-	for _, codecID := range primaryRecipes {
-		resID := []uint8{codecID} // make a results slice for each primary recipe
-		resPayload, err := CodecMap[codecID].EncodeBlock(probe)
-		if err != nil {
-			continue
-		}
-		results = append(results, result{
-			codecIDs: resID,
-			payload:  resPayload,
-		})
-	}
-	for range AutoDepth - 1 { // loop through the iterations
-		newResults := make([]result, 0, len(subsequentRecipes)*len(results)) // new iteration results
-		for j := range len(results) {                                        // go through the old results
-			if results[j].codecIDs[len(results[j].codecIDs)-1] == HUFFMAN {
-				newResults = append(newResults, results[j]) // carry huffman results into next iteration
+	// perform the first transform-and-primary-recipes pass
+	for _, transformPipeline := range transforms {
+		tProbe := make([]byte, len(probe))
+		tProbe = append(tProbe, probe...)
+		for _, transformID := range transformPipeline {
+			tProbe, err = CodecMap[transformID].EncodeBlock(tProbe)
+			if err != nil {
+				continue
 			}
-			for _, codecID := range subsequentRecipes { // go through the next recipes
-				res, err := CodecMap[codecID].EncodeBlock(results[j].payload) // encode further
+		}
+		for _, codecID := range primaryRecipes {
+			resPayload, err = CodecMap[codecID].EncodeBlock(tProbe)
+			if err != nil {
+				continue
+			}
+			results = append(results, result{
+				codecIDs: append(transformPipeline, codecID),
+				payload:  resPayload,
+			})
+		}
+	}
+	// perform the iterative subsequent-recipes pass
+	for range AutoDepth - 1 {
+		newResults := make([]result, 0, len(subsequentRecipes)*len(results))
+		for j := range len(results) {
+			for _, codecID := range subsequentRecipes {
+				resPayload, err = CodecMap[codecID].EncodeBlock(results[j].payload)
 				if err != nil {
 					continue
 				}
-				base := results[j].codecIDs                                                  // store current codecs
-				newCodecIDs := append(append([]uint8(nil), base...), codecID)                // append the new codec id to it
-				newResults = append(newResults, result{codecIDs: newCodecIDs, payload: res}) // store the result
+				newResults = append(newResults, result{
+					codecIDs: append(append([]uint8(nil), results[j].codecIDs...), codecID),
+					payload:  resPayload,
+				})
 			}
 		}
 		results = getFilteredResults(newResults) // get the 'keepAlong' best results
 	}
 	AC.CodecIDs = append([]uint8(nil), results[0].codecIDs...) // store the best of the best
-	if len(probe) == len(src) {
-		return results[0].payload, nil // don't redo the compression if you already did it while probing
-	}
 	var (
 		data []byte = src
-		err  error
 	)
 	for _, codecID := range results[0].codecIDs {
 		data, err = CodecMap[codecID].EncodeBlock(data) // encode it with best codecs
