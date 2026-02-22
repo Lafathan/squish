@@ -12,17 +12,17 @@ Transforms + ZRLE!
     + RLE optimized for runs of zeros - great after BWT-MTF
 
 ### Changed 
-- Some codecs now use pooled memory workspaces drasticly improving performance
+- Some codecs now use pooled memory workspaces drastically improving performance
 - RLE now uses bit instructed processing vs. byte instructed
     + Codec overhead is reduced by 87.5%
     + NOT COMPATABLE with older versions
 - New tolerance algorithm for lossy RLE 
-    + Faster, less memory usage, more consistent predictable
+    + Faster, less memory usage, more consistent and predictable
 - Bitio reader and writer now use scratch memory improving performance in HUFFMAN
 
 ### Fixed
-- RLE decoding first pass now properly allocates output size significantly reducing slice
-- Fixed indexing issue in LZSS that occasionally paniced for some data sets
+- RLE decoding first pass now properly allocates output size significantly reducing slice growth
+- Fixed indexing issue in LZSS that occasionally panicked for some data sets
 - Fixed duplicate help print for invalid CLI inputs
 
 ## [0.2.0] - 2026-01-31
