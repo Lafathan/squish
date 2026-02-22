@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"slices"
 	"squish/internal/codec"
 	"squish/internal/frame"
 	"squish/internal/sqerr"
@@ -26,7 +27,11 @@ func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize int, check
 	// validate blockSize first
 	blockSize = min(blockSize, frame.MaxBlockSize)
 	buffer := make([]byte, blockSize)
+	// determine if AUTO is used
+	useAUTO := slices.Contains(codecIDs, codec.AUTO)
 	for {
+		bType := frame.DefaultCodec
+		blockCodecIDs := append([]uint8(nil), codecIDs...)
 		// read in the source data
 		n, err := src.Read(buffer)
 		if n == 0 {
@@ -43,21 +48,27 @@ func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize int, check
 		if checksumMode&frame.UncompressedChecksum > 0 {
 			checksum = uint64(crc32.ChecksumIEEE(data))
 		}
-		// apply the codecs noting if AUTO is used
-		autoCodecIDs := make([]uint8, 0, codec.AutoDepth)
-		for _, codecID := range codecIDs {
-			currentCodec, ok := codec.CodecMap[codecID]
-			if !ok {
-				return sqerr.New(sqerr.Unsupported, "unsupported codec ID")
-			}
+		if useAUTO {
+			// if AUTO codec is being used
+			bType = frame.BlockCodec
+			currentCodec := codec.AUTOCodec{}
 			data, err = currentCodec.EncodeBlock(data)
 			if err != nil {
-				return sqerr.CodedError(err, sqerr.Internal, fmt.Sprintf("failed to encode block of data with codec %d", codecID))
+				return sqerr.CodedError(err, sqerr.Internal, fmt.Sprintf("failed to encode block of data with codec %d", codec.AUTO))
 			}
-			if codecID == codec.AUTO {
-				// grab the actual codecs used if in AUTO mode
-				autoCodecIDs = append(autoCodecIDs, currentCodec.(*codec.AUTOCodec).CodecIDs...)
-				break
+			blockCodecIDs = currentCodec.CodecIDs
+		} else {
+			// if AUTO is not being used
+			for _, codecID := range codecIDs {
+				// apply all codecs in pipeline
+				currentCodec, ok := codec.CodecMap[codecID]
+				if !ok {
+					return sqerr.New(sqerr.Unsupported, "unsupported codec ID")
+				}
+				data, err = currentCodec.EncodeBlock(data)
+				if err != nil {
+					return sqerr.CodedError(err, sqerr.Internal, fmt.Sprintf("failed to encode block of data with codec %d", codecID))
+				}
 			}
 		}
 		// perform compressed checksums
@@ -65,25 +76,19 @@ func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize int, check
 			checksum = checksum << (8 * crc32.Size)
 			checksum += uint64(crc32.ChecksumIEEE(data))
 		}
-		// special AUTO case
-		bType := frame.DefaultCodec
-		bCodecsID := codecIDs
-		if codecIDs[0] == codec.AUTO {
-			bType = frame.BlockCodec
-			bCodecsID = autoCodecIDs
-		}
 		// build and write the block
 		block := frame.Block{
-			BlockType: uint8(bType),
+			BlockType: bType,
 			USize:     uint64(n),
 			CSize:     uint64(len(data)),
 			Checksum:  checksum,
-			Codec:     bCodecsID,
+			Codec:     blockCodecIDs,
 		}
 		if err = fw.WriteBlock(block, bytes.NewReader(data)); err != nil {
 			return sqerr.CodedError(err, sqerr.IO, "failed to write encoded block")
 		}
-		if n < blockSize { // break if the last block was not full (partial final block)
+		// break if the last block was not full (partial final block)
+		if n < blockSize {
 			break
 		}
 	}

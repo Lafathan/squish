@@ -5,14 +5,14 @@ const MaxBlockSize = 1<<24 - 1
 
 // Block types
 const (
-	EOS = iota
+	EOS uint8 = iota
 	DefaultCodec
 	BlockCodec
 )
 
 // Header Flag constants
 const (
-	NoChecksum = iota
+	NoChecksum uint8 = iota
 	UncompressedChecksum
 	CompressedChecksum
 )
