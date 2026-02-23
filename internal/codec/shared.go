@@ -21,21 +21,25 @@ const (
 
 // codec key map
 var CodecMap = map[uint8]Codec{
+	// lossless codecs
 	RAW:     RAWCodec{},
 	RLE:     RLECodec{byteLength: 1, lossless: true},
 	RLE2:    RLECodec{byteLength: 2, lossless: true},
 	RLE3:    RLECodec{byteLength: 3, lossless: true},
 	RLE4:    RLECodec{byteLength: 4, lossless: true},
-	LRLE:    RLECodec{byteLength: 1, lossless: false},
-	LRLE2:   RLECodec{byteLength: 2, lossless: false},
-	LRLE3:   RLECodec{byteLength: 3, lossless: false},
-	LRLE4:   RLECodec{byteLength: 4, lossless: false},
 	ZRLE:    ZRLECodec{},
 	HUFFMAN: HUFFMANCodec{},
 	LZSS:    LZSSCodec{},
-	AUTO:    &AUTOCodec{},
-	MTF:     MTFCodec{},
-	BWT:     BWTCodec{},
+	// lossy codecs
+	LRLE:  RLECodec{byteLength: 1, lossless: false},
+	LRLE2: RLECodec{byteLength: 2, lossless: false},
+	LRLE3: RLECodec{byteLength: 3, lossless: false},
+	LRLE4: RLECodec{byteLength: 4, lossless: false},
+	// transforms
+	MTF: MTFCodec{},
+	BWT: BWTCodec{},
+	// auto
+	AUTO: &AUTOCodec{},
 }
 
 // codec string to codec ID map
@@ -60,6 +64,7 @@ var StringToCodecIDMap = map[string]uint8{
 // codec aliases
 var CodecAliases = map[string]string{
 	"DEFLATE": "LZSS-HUFFMAN",
+	"BZIP":    "BWT-MTF-ZRLE-HUFFMAN",
 }
 
 // codec interface

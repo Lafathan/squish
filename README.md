@@ -51,7 +51,7 @@ go build ./cmd/squish
 ### `enc`
 
 - `-codec`: codec pipeline (e.g. `RLE-HUFFMAN`, default DEFLATE)
-- `-blocksize`: block size (e.g. `256KiB`, `1MiB`, default 25KiB)
+- `-blocksize`: block size (e.g. `256KiB`, `1MiB`, default 128KiB)
 - `-checksum`: checksum mode (`u`, `c`, or `uc`, default None)
 - `-o, -output`: output path (default stdout)
 - `-list-codecs`: list supported codecs and exit

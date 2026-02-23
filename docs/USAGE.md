@@ -94,7 +94,7 @@ If -o is omitted, output goes to stdout.
 If input is omitted, input is read from stdin.
 
 ##### Defaults
-Squish defaults to using DEFLATE with a 25KiB block size and no checksum integrity checks when no arguments are provided. Additionally, if the output already exists, squish will overwrite it.
+Squish defaults to using AUTO with a 128KiB block size and no checksum integrity checks when no arguments are provided. Additionally, if the output already exists, squish will overwrite it.
 
 ##### Common flags
 ```bash
@@ -139,7 +139,9 @@ Example:
 - HUFFMAN - Entropy coding: assigns shorter bit codes to more frequent symbols and longer codes to rare ones. Great when byte values have a skewed distribution (text-like data, structured binaries, outputs of other transforms). Typically helps more as a second-stage codec.
 - LZSS - Dictionary-based (LZ77-family): encodes repeated sequences by referencing earlier occurrences with (offset, length) pairs, falling back to literals when no good match exists. Strong general-purpose compressor for data with repeated substrings/patterns (text, logs, structured formats).
 - DEFLATE - Convenience alias for the LZSS-HUFFMAN pipeline.
-- AUTO - Allow squish to iteratively apply a host of codecs to a subset of your data to determine the optimal pipeline per block.
+- MTF - Move-To-Front Transform: replace each data value with that values index in an alphabet before moving that value to the front of the alphabet.
+- BWT - Burrows-Wheeler Transform: sort the elements in a dataset using sorted rotations of the dataset. Groups like elements together.
+- AUTO - Allow squish to use data features to determine the best codecs to then apply to a subset of your data to determine the optimal pipeline per block.
 
 #### Decode order
 Compression applies left-to-right; decompression reverses that.

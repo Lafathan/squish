@@ -160,8 +160,12 @@ Codec IDs are `uint8`.
 - `0x06` LRLE2 (lossy, 2-byte stride)
 - `0x07` LRLE3 (lossy, 3-byte stride)
 - `0x08` LRLE4 (lossy, 4-byte stride)
-- `0x09` HUFFMAN (canonical)
-- `0x0A` LZSS 
+- `0x09` ZRLE (lossless)
+- `0x0A` HUFFMAN (canonical)
+- `0x0B` LZSS (lossless) 
+- `0x0C` BWT (transform) 
+- `0x0D` MTF (transform) 
+- `0x0F` AUTO
 
 Additional codecs are defined via codec aliases when they can be represented by a pipeline.
 - DEFLATE -> LZSS and HUFFMAN
