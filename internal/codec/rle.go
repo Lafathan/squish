@@ -35,14 +35,6 @@ func newTolerance(n int) *RLTolerance {
 	}
 }
 
-func absByteDiff(a, b byte) byte {
-	// absolute value byte difference
-	if a >= b {
-		return a - b
-	}
-	return b - a
-}
-
 func equalSliceWithinTolerance(slice1 []byte, slice2 []byte, tol []float64) bool {
 	// element-wise slice comparison
 	if len(slice1) != len(slice2) {
@@ -54,12 +46,6 @@ func equalSliceWithinTolerance(slice1 []byte, slice2 []byte, tol []float64) bool
 		}
 	}
 	return true
-}
-
-func clampFloat(f, lo, hi float64) float64 {
-	// clamp a float to within a min and max
-	f = max(f, lo)
-	return min(f, hi)
 }
 
 func (t *RLTolerance) updateTolerance(data []byte) {

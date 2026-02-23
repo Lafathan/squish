@@ -96,7 +96,7 @@ func zeroRatio(data []byte) float64 {
 
 func runRatio(data []byte) float64 {
 	// calculate the ratio of runs
-	if len(data) == 0 {
+	if len(data) < 3 {
 		return 0
 	}
 	var (
@@ -112,7 +112,7 @@ func runRatio(data []byte) float64 {
 
 func duplicateRatio(data []byte) float64 {
 	// calculate the ratio of repeated 4 byte segments
-	if len(data) == 0 {
+	if len(data) < 4 {
 		return 0
 	}
 	var (
@@ -134,6 +134,7 @@ func duplicateRatio(data []byte) float64 {
 }
 
 func getNextCodecs(f features) [][]uint8 {
+	// choose valid pipelines based on data features
 	codecs := [][]uint8{{RAW}}
 	if f.z > 0.03 || (f.z > 0.015 && f.e <= 6.8) {
 		codecs = append(codecs, []uint8{ZRLE, HUFFMAN})

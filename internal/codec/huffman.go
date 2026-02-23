@@ -19,7 +19,7 @@ type HUFFMANCodec struct{}
 
 type node struct {
 	nodeType  int      // 0 is leaf, 1 is a node
-	frequency int      // frequency of value, or sum of frequencies of children
+	frequency uint32   // frequency of value, or sum of frequencies of children
 	children  [2]*node // children if not a leaf
 	value     byte
 }
@@ -43,16 +43,7 @@ func (h *huffmanHeap) Pop() any {
 	return x
 }
 
-func getFrequencyMap(src []byte) *[256]int {
-	// create a frequency map of byte values from a byte slice - essentially a histogram
-	freqMap := [256]int{}
-	for i := range len(src) {
-		freqMap[src[i]]++
-	}
-	return &freqMap
-}
-
-func getHuffmanTreeFromFreqMap(freqMap *[256]int) *node {
+func getHuffmanTreeFromFreqMap(freqMap []uint32) *node {
 	// build a huffman tree of nodes from a frequency map using a heap
 	// left node is always smallest, right node is second smallest
 	var (
@@ -220,8 +211,9 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, error) {
 		tmpBig        = big.NewInt(0)                 // big.Int for nibble of bit.Int
 		remainingBits int                             // remaining bites to be written
 		bitsToWrite   int                             // number of bits to write per pass per symbol
+		f             = make([]uint32, 256)
 	)
-	f := getFrequencyMap(src)
+	byteHistogram(src, f)
 	t := getHuffmanTreeFromFreqMap(f)
 	l := getHuffmanLengthsFromTree(t)
 	d := getHuffmanDictFromLengths(l)

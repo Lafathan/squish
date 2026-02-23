@@ -6,19 +6,19 @@ import (
 )
 
 const (
-	maxLookBack  = 1<<12 - 1              // 4095 - how far back to look for matches
-	minMatchLen  = 3                      // min match length
-	maxMatchLen  = 1<<4 - 1 + minMatchLen // 18 - how far forward you can match (including min match)
-	maxMatchIter = 32                     // number of hash matches to look back through before halting
-	hashSize     = 1 << 16                // possible hash matches
+	maxLookBack        = 1<<12 - 1              // 4095 - how far back to look for matches
+	minMatchLen  int32 = 3                      // min match length
+	maxMatchLen        = 1<<4 - 1 + minMatchLen // 18 - how far forward you can match (including min match)
+	maxMatchIter       = 32                     // number of hash matches to look back through before halting
+	hashSize           = 1 << 16                // possible hash matches
 )
 
 type LZSSCodec struct{}
 
 type lzssWorkspace struct {
-	head       [hashSize]int        // most recent match of hashed 3-byte sequence
-	prev       [maxLookBack + 1]int // previous matches
-	groupBytes []byte               // current values corresponding to the current flag byte
+	head       [hashSize]int32        // most recent match of hashed 3-byte sequence
+	prev       [maxLookBack + 1]int32 // previous matches
+	groupBytes []byte                 // current values corresponding to the current flag byte
 }
 
 var lzssPool = sync.Pool{
@@ -28,17 +28,17 @@ var lzssPool = sync.Pool{
 	},
 }
 
-func balanceBytes(lookBack int, runLen int) []byte {
+func balanceBytes(lookBack int32, runLen int32) []byte {
 	// combine lookback and run length into two byte representation with 12 bits for lookback and 4 bits for run length
 	a := byte((lookBack >> 4) & 0xFF)
 	b := byte(((lookBack << 4) & 0xF0) | ((runLen - minMatchLen) & 0x0F))
 	return []byte{a, b}
 }
 
-func splitBytes(a byte, b byte) (int, int) {
+func splitBytes(a byte, b byte) (int32, int32) {
 	// split lookback and run length into individual values from two byte representation
-	lookback := (int(a) << 4) | int((b>>4)&0x0F)
-	runLen := int(b&0x0F) + minMatchLen
+	lookback := (int32(a) << 4) | int32((b>>4)&0x0F)
+	runLen := int32(b&0x0F) + minMatchLen
 	return lookback, runLen
 }
 
@@ -54,17 +54,18 @@ func hashBytes(bytes []byte) int {
 func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
 	// encode src using the Lempel–Ziv–Storer–Szymanski algorithm
 	var (
-		out          = make([]byte, 0, len(src)*9/8)
-		srcIdx       = 0
+		out                = make([]byte, 0, len(src)*9/8)
+		srcIdx       int32 = 0
 		flagIdx      int
 		flagByte     byte
 		hash         int // hash of the current minMatchLen bytes
-		curMatchIdx  int
-		curMatchLen  int
-		bestMatchIdx int
-		bestMatchLen int
-		iterations   int // number of iterations of checking matches
-		lookBackIdx  int // index of the lookback window start
+		curMatchIdx  int32
+		curMatchLen  int32
+		bestMatchIdx int32
+		bestMatchLen int32
+		iterations   int32 // number of iterations of checking matches
+		lookBackIdx  int32 // index of the lookback window start
+		srcLen       = int32(len(src))
 	)
 	// instantiate your workspace
 	ws := lzssPool.Get().(*lzssWorkspace)
@@ -76,18 +77,18 @@ func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
 	for i := range len(ws.prev) {
 		ws.prev[i] = -1
 	}
-	for srcIdx < len(src) {
+	for srcIdx < srcLen {
 		// make a new flag byte and associated group of match
 		flagIdx = 7
 		flagByte = 0
 		ws.groupBytes = ws.groupBytes[:0]
 		for flagIdx >= 0 {
 			// break out early if you run out of data before finishing a flag byte
-			if srcIdx >= len(src) {
+			if srcIdx >= srcLen {
 				break
 			}
 			bestMatchLen = 0
-			if srcIdx+minMatchLen <= len(src) {
+			if srcIdx+minMatchLen <= srcLen {
 				// hash the next minMatchLen number of bytes
 				// use that hash to get the most recent potential match of that same hash using the head array
 				iterations = 0
@@ -103,7 +104,7 @@ func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
 						// while still matching and the match isn't too long
 						curMatchLen++
 						// break out if the match reached the end of the input or overlaps with current hashed bytes
-						if srcIdx+curMatchLen >= len(src) || curMatchIdx+curMatchLen < srcIdx {
+						if srcIdx+curMatchLen >= srcLen || curMatchIdx+curMatchLen < srcIdx {
 							break
 						}
 					}
@@ -126,13 +127,13 @@ func (LZSSCodec) EncodeBlock(src []byte) ([]byte, error) {
 				ws.groupBytes = append(ws.groupBytes, balanceBytes(bestMatchIdx, bestMatchLen)...)
 				srcIdx += bestMatchLen
 			} else {
-				ws.groupBytes = append(ws.groupBytes, src[srcIdx]) // add the literal
-				srcIdx++                                           // increment where you are in the source data
+				ws.groupBytes = append(ws.groupBytes, src[srcIdx])
+				srcIdx++
 			}
 			// update head and prev arrays with skipped byte hashes
 			end := srcIdx
 			for k := start; k < end; k++ {
-				if minMatchLen+k <= len(src) {
+				if minMatchLen+k <= srcLen {
 					hash = hashBytes(src[k : k+minMatchLen])
 					ws.prev[k%(maxLookBack+1)] = ws.head[hash]
 					ws.head[hash] = k
@@ -152,17 +153,17 @@ func (LZSSCodec) DecodeBlock(src []byte) ([]byte, error) {
 		return []byte{}, nil
 	}
 	var (
-		srcIdx   int
+		srcIdx   int32
 		flagByte byte
 		flagBit  byte
 		flagIdx  int
-		outLen   int
-		lookback int // current look back value
-		runLen   int // current run length value
-
+		outLen   int32
+		lookback int32 // current look back value
+		runLen   int32 // current run length value
+		srcLen   = int32(len(src))
 	)
 	// first pass for determining output length
-	for srcIdx < len(src) {
+	for srcIdx < srcLen {
 		flagByte = src[srcIdx]
 		srcIdx++
 		for flagIdx = 7; flagIdx >= 0; flagIdx-- {
@@ -174,17 +175,17 @@ func (LZSSCodec) DecodeBlock(src []byte) ([]byte, error) {
 				srcIdx++
 			} else {
 				// if it is a lookback-run-length pair, copy 'run' literal from 'lookback' back in the output
-				if srcIdx+1 >= len(src) {
+				if srcIdx+1 >= srcLen {
 					return []byte{}, sqerr.New(sqerr.Corrupt, "Invalid LZSS format")
 				}
-				runLen = int(src[srcIdx+1]&0x0F) + minMatchLen
+				runLen = int32(src[srcIdx+1]&0x0F) + minMatchLen
 				if runLen < minMatchLen {
 					return []byte{}, sqerr.New(sqerr.Corrupt, "Invalid match length in LZSS")
 				}
 				outLen += runLen
 				srcIdx += 2
 			}
-			if srcIdx > len(src) {
+			if srcIdx > srcLen {
 				break
 			}
 		}
@@ -192,12 +193,12 @@ func (LZSSCodec) DecodeBlock(src []byte) ([]byte, error) {
 	// second pass to actually decode it
 	srcIdx = 0
 	out := make([]byte, 0, outLen)
-	for srcIdx < len(src) {
+	for srcIdx < srcLen {
 		flagByte = src[srcIdx]
 		srcIdx++
 		for flagIdx = 7; flagIdx >= 0; flagIdx-- {
 			// read flag bit to determine how to process next bytes
-			if srcIdx >= len(src) {
+			if srcIdx >= srcLen {
 				break
 			}
 			flagBit = (flagByte >> flagIdx) & 0x01
@@ -209,7 +210,7 @@ func (LZSSCodec) DecodeBlock(src []byte) ([]byte, error) {
 				// copy range for lookback-run-length pairs
 				lookback, runLen = splitBytes(src[srcIdx], src[srcIdx+1])
 				for range runLen {
-					out = append(out, out[len(out)-lookback])
+					out = append(out, out[int32(len(out))-lookback])
 				}
 				srcIdx += 2
 			}

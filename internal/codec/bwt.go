@@ -25,37 +25,6 @@ var bwtPool = sync.Pool{
 	},
 }
 
-func grow32(slice []uint32, length int) []uint32 {
-	// function to grow slices
-	if cap(slice) < length {
-		return make([]uint32, length)
-	}
-	return slice[:length]
-}
-
-func histogram(bytes []byte, count []uint32) {
-	// build a byte histogram
-	for i := range len(count) {
-		count[i] = 0
-	}
-	for i := range len(bytes) {
-		count[bytes[i]]++
-	}
-}
-
-func cumSum(count []uint32) {
-	// create cumulative sum
-	var (
-		sum uint32 = 0
-		val uint32
-	)
-	for i := range len(count) {
-		val = count[i]
-		count[i] = sum
-		sum += val
-	}
-}
-
 func initializeRank(s []uint8, pos, rank, sa []uint32) uint32 {
 	// initialize ranks of rotations
 	// ranks are decided by count-sorting based on first character
@@ -65,7 +34,7 @@ func initializeRank(s []uint8, pos, rank, sa []uint32) uint32 {
 		r uint32
 	)
 	// perform count-sort
-	histogram(s, pos)
+	byteHistogram(s, pos)
 	cumSum(pos)
 	for i = range uint32(len(s)) {
 		b = s[i]       // for each letter
@@ -93,9 +62,7 @@ func sortBySecondKey(inSA, outSA, rank, count []uint32, k uint32) {
 		j      uint32
 	)
 	// wipe your histogram
-	for i = range len(count) {
-		count[i] = 0
-	}
+	wipeSlice(count)
 	// get histogram of ranks for second half of suffix prefix
 	for i = range len(inSA) {
 		j = inSA[i] + k
@@ -125,9 +92,7 @@ func sortByFirstKey(inSA, outSA, rank, count []uint32) {
 		i   int
 	)
 	// wipe your histogram
-	for i = range len(count) {
-		count[i] = 0
-	}
+	wipeSlice(count)
 	// get histogram of ranks for first half of suffix prefex
 	for i = range len(inSA) {
 		count[rank[inSA[i]]]++
@@ -257,7 +222,7 @@ func (BWTCodec) DecodeBlock(src []byte) ([]byte, error) {
 		return []byte{}, sqerr.New(sqerr.Corrupt, "Primary BWT value is too large")
 	}
 	// build the count array (cumulative sum)
-	histogram(src, ws.pos)
+	byteHistogram(src, ws.pos)
 	cumSum(ws.pos)
 	var (
 		out    = make([]byte, len(src)) // make an output slice

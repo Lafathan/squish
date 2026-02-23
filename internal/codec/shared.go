@@ -68,3 +68,52 @@ type Codec interface {
 	DecodeBlock(src []byte) (dst []byte, err error)
 	IsLossless() bool
 }
+
+// byte histogram function
+func byteHistogram(bytes []byte, s []uint32) {
+	wipeSlice(s)
+	for i := range len(bytes) {
+		s[bytes[i]]++
+	}
+}
+
+// wipe slice function
+func wipeSlice(s []uint32) {
+	for i := range len(s) {
+		s[i] = 0
+	}
+}
+
+// create cumulative sum
+func cumSum(s []uint32) {
+	var (
+		sum uint32 = 0
+		val uint32
+	)
+	for i := range len(s) {
+		val = s[i]
+		s[i] = sum
+		sum += val
+	}
+}
+
+// grow a slice
+func grow32(slice []uint32, length int) []uint32 {
+	if cap(slice) < length {
+		return make([]uint32, length)
+	}
+	return slice[:length]
+}
+
+// clamp a float64 value
+func clampFloat(f, lo, hi float64) float64 {
+	return min(max(f, lo), hi)
+}
+
+// absolute byte delta
+func absByteDiff(a, b byte) byte {
+	if a >= b {
+		return a - b
+	}
+	return b - a
+}
