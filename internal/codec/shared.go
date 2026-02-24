@@ -7,16 +7,18 @@ const (
 	RLE2
 	RLE3
 	RLE4
+	ZRLE
+	HUFFMAN
+	LZSS
 	LRLE
 	LRLE2
 	LRLE3
 	LRLE4
-	ZRLE
-	HUFFMAN
-	LZSS
-	AUTO
 	MTF
 	BWT
+	DELTA
+	XOR
+	AUTO
 )
 
 // codec key map
@@ -36,8 +38,10 @@ var CodecMap = map[uint8]Codec{
 	LRLE3: RLECodec{byteLength: 3, lossless: false},
 	LRLE4: RLECodec{byteLength: 4, lossless: false},
 	// transforms
-	MTF: MTFCodec{},
-	BWT: BWTCodec{},
+	MTF:   MTFCodec{},
+	BWT:   BWTCodec{},
+	DELTA: DELTACodec{},
+	XOR:   XORCodec{},
 	// auto
 	AUTO: &AUTOCodec{},
 }
@@ -49,16 +53,18 @@ var StringToCodecIDMap = map[string]uint8{
 	"RLE2":    RLE2,
 	"RLE3":    RLE3,
 	"RLE4":    RLE4,
+	"ZRLE":    ZRLE,
+	"HUFFMAN": HUFFMAN,
+	"LZSS":    LZSS,
 	"LRLE":    LRLE,
 	"LRLE2":   LRLE2,
 	"LRLE3":   LRLE3,
 	"LRLE4":   LRLE4,
-	"ZRLE":    ZRLE,
-	"HUFFMAN": HUFFMAN,
-	"LZSS":    LZSS,
-	"AUTO":    AUTO,
 	"MTF":     MTF,
 	"BWT":     BWT,
+	"DELTA":   DELTA,
+	"XOR":     XOR,
+	"AUTO":    AUTO,
 }
 
 // codec aliases
