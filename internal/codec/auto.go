@@ -3,14 +3,13 @@ package codec
 import (
 	"bytes"
 	"math"
-	"slices"
 	"sort"
 )
 
 const (
 	minProbeLen  int = 1 << 14 // minimum size of payload chunk to test compression
 	maxProbeLen  int = 1 << 16 // maximum size of payload chunk to test compression
-	maxPipelines int = 10      // maximum number of pipelines to test
+	maxPipelines int = 4       // maximum number of pipelines to test
 )
 
 var transforms = [][]uint8{{RAW}, {DELTA}, {XOR}, {BWT, MTF}}
@@ -173,7 +172,6 @@ func getScoredPipelines(f features) []candidatePipeline {
 		lowUniq    = 1.0 - f.u
 		zClump     = math.Sqrt(f.z) * (0.35 + 0.65*f.s)
 		runMax     = max(max(f.s, f.d), max(f.t, f.q))
-		runAvg     = 0.25 * (f.s + f.d + f.t + f.q)
 	)
 	// HUFFMAN score
 	candidates = append(candidates, candidatePipeline{
@@ -183,27 +181,27 @@ func getScoredPipelines(f features) []candidatePipeline {
 	// RLE-HUFFMAN score
 	candidates = append(candidates, candidatePipeline{
 		pipeline: []uint8{RLE, HUFFMAN},
-		score:    0.72*f.s + 0.16*lowEnt + 0.10*zClump + 0.02*f.m,
+		score:    0.65*f.s + 0.35*lowEnt,
 	})
 	// RLE2-HUFFMAN score
 	candidates = append(candidates, candidatePipeline{
 		pipeline: []uint8{RLE2, HUFFMAN},
-		score:    0.72*f.d + 0.16*lowEnt + 0.10*zClump + 0.02*f.m,
+		score:    0.65*f.d + 0.35*lowEnt,
 	})
 	// RLE3-HUFFMAN score
 	candidates = append(candidates, candidatePipeline{
 		pipeline: []uint8{RLE3, HUFFMAN},
-		score:    0.72*f.t + 0.16*lowEnt + 0.10*zClump + 0.02*f.m,
+		score:    0.65*f.t + 0.35*lowEnt,
 	})
 	// RLE4-HUFFMAN score
 	candidates = append(candidates, candidatePipeline{
 		pipeline: []uint8{RLE4, HUFFMAN},
-		score:    0.72*f.q + 0.16*lowEnt + 0.10*zClump + 0.02*f.m,
+		score:    0.65*f.q + 0.35*lowEnt,
 	})
 	// ZRLE-HUFFMAN score
 	candidates = append(candidates, candidatePipeline{
 		pipeline: []uint8{ZRLE, HUFFMAN},
-		score:    0.80*zClump + 0.12*lowEnt + 0.08*runAvg,
+		score:    0.70*zClump + 0.16*lowEnt + 0.14*f.s,
 	})
 	// LZSS-HUFFMAN score
 	candidates = append(candidates, candidatePipeline{
@@ -237,8 +235,6 @@ func (AC *AUTOCodec) EncodeBlock(src []byte) ([]byte, error) {
 			continue
 		}
 		features := getFeatures(transformProbe)
-		if slices.Contains(transform, BWT) {
-		}
 		transformCandidates := getScoredPipelines(features)
 		for _, tpl := range transformCandidates {
 			tpl.transform = transform
