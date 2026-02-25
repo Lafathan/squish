@@ -54,21 +54,14 @@ func Encode(src io.Reader, dst io.Writer, codecIDs []uint8, blockSize int, check
 			currentCodec := codec.AUTOCodec{}
 			data, err = currentCodec.EncodeBlock(data)
 			if err != nil {
-				return sqerr.CodedError(err, sqerr.Internal, fmt.Sprintf("failed to encode block of data with codec %d", codec.AUTO))
+				return sqerr.CodedError(err, sqerr.Internal, fmt.Sprintf("AUTO failed to encode block: %v", err))
 			}
 			blockCodecIDs = currentCodec.CodecIDs
 		} else {
-			// if AUTO is not being used
-			for _, codecID := range codecIDs {
-				// apply all codecs in pipeline
-				currentCodec, ok := codec.CodecMap[codecID]
-				if !ok {
-					return sqerr.New(sqerr.Unsupported, "unsupported codec ID")
-				}
-				data, err = currentCodec.EncodeBlock(data)
-				if err != nil {
-					return sqerr.CodedError(err, sqerr.Internal, fmt.Sprintf("failed to encode block of data with codec %d", codecID))
-				}
+			// if AUTO is not being used, apply all codecs in pipeline
+			data, err = codec.EncodePipeline(data, codecIDs)
+			if err != nil {
+				return err
 			}
 		}
 		// perform compressed checksums

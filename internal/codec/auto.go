@@ -1,37 +1,53 @@
 package codec
 
 import (
+	"bytes"
 	"math"
+	"slices"
 	"sort"
 )
 
 const (
-	minProbeLen int = 1 << 14 // minimum size of payload chunk to test compression
-	maxProbeLen int = 1 << 16 // maximum size of payload chunk to test compression
+	minProbeLen  int = 1 << 14 // minimum size of payload chunk to test compression
+	maxProbeLen  int = 1 << 16 // maximum size of payload chunk to test compression
+	maxPipelines int = 10      // maximum number of pipelines to test
 )
+
+var transforms = [][]uint8{{RAW}, {DELTA}, {XOR}, {BWT, MTF}}
 
 type AUTOCodec struct {
 	CodecIDs []uint8
 }
 
-type result struct {
-	codecIDs    []uint8
-	payloadSize uint32
+type candidatePipeline struct {
+	transform      []uint8
+	transformProbe []byte
+	pipeline       []uint8
+	score          float64
+	payloadSize    uint32
 }
 
 type features struct {
-	e float64 // entropy
-	z float64 // zero ratio
-	r float64 // run ratio
-	d float64 // duplicate ratio
+	e float64 // normalized entropy
+	z float64 // zero run ratio
+	s float64 // single stride run ratio
+	d float64 // double stride run ratio
+	t float64 // triple stride run ratio
+	q float64 // quadruple stride run ratio
+	m float64 // match ratio
+	u float64 // unique values ratio
 }
 
 func getFeatures(src []byte) features {
 	f := features{}
-	f.e = entropy(src)
-	f.z = zeroRatio(src)
-	f.r = runRatio(src)
-	f.d = duplicateRatio(src)
+	f.e = entropyNorm(src)
+	f.z = zeroRunRatio(src)
+	f.s = runRatio(src, 1)
+	f.d = runRatio(src, 2)
+	f.t = runRatio(src, 3)
+	f.q = runRatio(src, 4)
+	f.m = matchRatio(src)
+	f.u = uniqueRatio(src)
 	return f
 }
 
@@ -54,8 +70,8 @@ func getPayloadProbe(src []byte) []byte {
 	return src[startIdx:endIdx]
 }
 
-func entropy(data []byte) float64 {
-	// calculate the entropy of a dataset
+func entropyNorm(data []byte) float64 {
+	// calculate the normalized entropy of a dataset
 	if len(data) == 0 {
 		return 0
 	}
@@ -75,42 +91,40 @@ func entropy(data []byte) float64 {
 			e -= p[i] * math.Log2(p[i])
 		}
 	}
-	return e
+	return clampFloat(e/8, 0, 1)
 }
 
-func zeroRatio(data []byte) float64 {
+func zeroRunRatio(data []byte) float64 {
 	// calculate the ratio of zero valued data
 	if len(data) == 0 {
 		return 0
 	}
-	var (
-		z float64
-	)
-	for i := range len(data) {
-		if data[i] == 0x00 {
+	var z float64
+	for i := 1; i < len(data); i++ {
+		if data[i] == 0x00 && data[i-1] == 0x00 {
 			z++
 		}
 	}
-	return z / float64(len(data))
+	return z / float64(len(data)-1)
 }
 
-func runRatio(data []byte) float64 {
+func runRatio(data []byte, s int) float64 {
 	// calculate the ratio of runs
-	if len(data) < 3 {
+	if len(data) < 3*s || s <= 0 {
 		return 0
 	}
-	var (
-		r float64
-	)
-	for i := 3; i < len(data); i++ {
-		if data[i] == data[i-1] && data[i] == data[i-2] {
+	var r float64
+	for i := 1; i < len(data)/s; i++ {
+		a := (i - 1) * s
+		b := i * s
+		if bytes.Equal(data[a:a+s], data[b:b+s]) {
 			r++
 		}
 	}
-	return r / float64(len(data)-2)
+	return r / float64(len(data)/s-1)
 }
 
-func duplicateRatio(data []byte) float64 {
+func matchRatio(data []byte) float64 {
 	// calculate the ratio of repeated 4 byte segments
 	if len(data) < 4 {
 		return 0
@@ -133,26 +147,78 @@ func duplicateRatio(data []byte) float64 {
 	return d / float64(len(data)-byteLength+1)
 }
 
-func getNextCodecs(f features) [][]uint8 {
+func uniqueRatio(data []byte) float64 {
+	// calculate the percentage of possible byte values appearing in data
+	if len(data) == 0 {
+		return 0
+	}
+	var (
+		seen          = make([]uint32, 256)
+		count float64 = 0
+	)
+	byteHistogram(data, seen)
+	for i := range len(seen) {
+		if seen[i] > 0 {
+			count++
+		}
+	}
+	return count / 256.0
+}
+
+func getScoredPipelines(f features) []candidatePipeline {
 	// choose valid pipelines based on data features
-	codecs := [][]uint8{{RAW}}
-	if f.z > 0.03 || (f.z > 0.015 && f.e <= 6.8) {
-		codecs = append(codecs, []uint8{ZRLE, HUFFMAN})
-	}
-	if f.r > 0.04 && f.e < 7.6 {
-		codecs = append(codecs, []uint8{RLE, HUFFMAN})
-	}
-	if f.d > 0.05 {
-		codecs = append(codecs, []uint8{LZSS, HUFFMAN})
-	}
-	if f.e < 7.2 && f.d > 0.03 {
-		codecs = append(codecs, []uint8{BWT, MTF, HUFFMAN})
-		codecs = append(codecs, []uint8{BWT, MTF, ZRLE, HUFFMAN})
-	}
-	if f.e < 7.4 && f.d < 0.04 && f.r < 0.03 {
-		codecs = append(codecs, []uint8{HUFFMAN})
-	}
-	return codecs
+	var (
+		candidates []candidatePipeline
+		lowEnt     = 1.0 - f.e
+		lowUniq    = 1.0 - f.u
+		zClump     = math.Sqrt(f.z) * (0.35 + 0.65*f.s)
+		runMax     = max(max(f.s, f.d), max(f.t, f.q))
+		runAvg     = 0.25 * (f.s + f.d + f.t + f.q)
+	)
+	// HUFFMAN score
+	candidates = append(candidates, candidatePipeline{
+		pipeline: []uint8{HUFFMAN},
+		score:    clampFloat(0.70*lowEnt+0.15*lowUniq-0.20*runMax-0.20*f.m, 0, 1),
+	})
+	// RLE-HUFFMAN score
+	candidates = append(candidates, candidatePipeline{
+		pipeline: []uint8{RLE, HUFFMAN},
+		score:    0.72*f.s + 0.16*lowEnt + 0.10*zClump + 0.02*f.m,
+	})
+	// RLE2-HUFFMAN score
+	candidates = append(candidates, candidatePipeline{
+		pipeline: []uint8{RLE2, HUFFMAN},
+		score:    0.72*f.d + 0.16*lowEnt + 0.10*zClump + 0.02*f.m,
+	})
+	// RLE3-HUFFMAN score
+	candidates = append(candidates, candidatePipeline{
+		pipeline: []uint8{RLE3, HUFFMAN},
+		score:    0.72*f.t + 0.16*lowEnt + 0.10*zClump + 0.02*f.m,
+	})
+	// RLE4-HUFFMAN score
+	candidates = append(candidates, candidatePipeline{
+		pipeline: []uint8{RLE4, HUFFMAN},
+		score:    0.72*f.q + 0.16*lowEnt + 0.10*zClump + 0.02*f.m,
+	})
+	// ZRLE-HUFFMAN score
+	candidates = append(candidates, candidatePipeline{
+		pipeline: []uint8{ZRLE, HUFFMAN},
+		score:    0.80*zClump + 0.12*lowEnt + 0.08*runAvg,
+	})
+	// LZSS-HUFFMAN score
+	candidates = append(candidates, candidatePipeline{
+		pipeline: []uint8{LZSS, HUFFMAN},
+		score:    clampFloat(0.58*f.m+0.18*lowEnt+0.12*lowUniq-0.55*runMax-0.20*zClump, 0, 1),
+	})
+	return candidates
+}
+
+func getNBestScoredPipelines(c []candidatePipeline, n int) []candidatePipeline {
+	// sort the candidate piplelines based on their score
+	sort.Slice(c, func(i, j int) bool {
+		return c[i].score > c[j].score
+	})
+	return c[:min(n, len(c))]
 }
 
 func (AC *AUTOCodec) EncodeBlock(src []byte) ([]byte, error) {
@@ -161,45 +227,44 @@ func (AC *AUTOCodec) EncodeBlock(src []byte) ([]byte, error) {
 		return src, nil
 	}
 	var (
-		probe     = getPayloadProbe(src)
-		f         = getFeatures(probe)
-		pipelines = getNextCodecs(f)
-		results   = make([]result, 0, len(pipelines))
-		err       error
+		probe      = getPayloadProbe(src)
+		candidates []candidatePipeline
 	)
-	// apply all the pipelines to the probe data set
-	for _, pipeline := range pipelines {
-		payload := append([]byte(nil), probe...)
-		success := true
-		for _, codecID := range pipeline {
-			payload, err = CodecMap[codecID].EncodeBlock(payload)
-			if err != nil {
-				success = false
-				break
-			}
-		}
-		if !success {
+	// get the features and then scored pipelines for all transforms
+	for _, transform := range transforms {
+		transformProbe, err := EncodePipeline(probe, transform)
+		if err != nil {
 			continue
 		}
-		results = append(results, result{
-			codecIDs:    append([]byte(nil), pipeline...),
-			payloadSize: uint32(len(payload)),
-		})
-	}
-	// sort to pick the best one based on payload size
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].payloadSize < results[j].payloadSize
-	})
-	// set the AUTOCodec codecIDs so the encoder can put them in the block header
-	AC.CodecIDs = append([]byte(nil), results[0].codecIDs...)
-	// get the encoded data
-	for _, codecID := range AC.CodecIDs {
-		src, err = CodecMap[codecID].EncodeBlock(src)
-		if err != nil {
-			return src, err
+		features := getFeatures(transformProbe)
+		if slices.Contains(transform, BWT) {
+		}
+		transformCandidates := getScoredPipelines(features)
+		for _, tpl := range transformCandidates {
+			tpl.transform = transform
+			tpl.transformProbe = transformProbe
+			candidates = append(candidates, tpl)
 		}
 	}
-	return src, nil
+	// get the best candidates
+	bestCandidates := getNBestScoredPipelines(candidates, maxPipelines)
+	// apply all the pipelines to the probe data set
+	for i, c := range bestCandidates {
+		payload, err := EncodePipeline(c.transformProbe, c.pipeline)
+		if err != nil {
+			continue
+		}
+		bestCandidates[i].payloadSize = uint32(len(payload))
+	}
+	// sort to pick the best one based on resulting payload size
+	sort.Slice(bestCandidates, func(i, j int) bool {
+		return bestCandidates[i].payloadSize < bestCandidates[j].payloadSize
+	})
+	// set the AUTOCodec codecIDs so the encoder can put them in the block header
+	AC.CodecIDs = append(bestCandidates[0].transform, bestCandidates[0].pipeline...)
+	// get the encoded data
+	out, err := EncodePipeline(src, AC.CodecIDs)
+	return out, err
 }
 
 func (*AUTOCodec) DecodeBlock(src []byte) ([]byte, error) {

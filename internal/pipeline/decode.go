@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"slices"
 	"squish/internal/codec"
 	"squish/internal/frame"
 	"squish/internal/sqerr"
@@ -74,16 +75,15 @@ func Decode(src io.Reader, dst io.Writer) error {
 		}
 		lossless := true
 		// apply the codecs in reverse
+		revCodecList := append([]uint8(nil), codecList...)
+		slices.Reverse(revCodecList)
+		ws.data, err = codec.DecodePipeline(ws.data, revCodecList)
+		if err != nil {
+			return err
+		}
+		// determine if lossy codecs were used
 		for i := range len(codecList) {
-			currentCodec, ok := codec.CodecMap[codecList[len(codecList)-1-i]]
-			if !ok {
-				return sqerr.New(sqerr.Unsupported, "unsupported codec ID")
-			}
-			ws.data, err = currentCodec.DecodeBlock(ws.data)
-			if err != nil {
-				return sqerr.CodedError(err, sqerr.Corrupt, "failed to decode block")
-			}
-			if currentCodec.IsLossless() == false {
+			if codec.CodecMap[codecList[i]].IsLossless() == false {
 				lossless = false
 			}
 		}

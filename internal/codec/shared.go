@@ -1,24 +1,29 @@
 package codec
 
+import (
+	"fmt"
+	"squish/internal/sqerr"
+)
+
 // codec IDs
 const (
-	RAW = iota
-	RLE
-	RLE2
-	RLE3
-	RLE4
-	ZRLE
-	HUFFMAN
-	LZSS
-	LRLE
-	LRLE2
-	LRLE3
-	LRLE4
-	MTF
-	BWT
-	DELTA
-	XOR
-	AUTO
+	RAW     = iota // 0
+	RLE            // 1
+	RLE2           // 2
+	RLE3           // 3
+	RLE4           // 4
+	ZRLE           // 5
+	HUFFMAN        // 6
+	LZSS           // 7
+	LRLE           // 8
+	LRLE2          // 9
+	LRLE3          // 10
+	LRLE4          // 11
+	MTF            // 12
+	BWT            // 13
+	DELTA          // 14
+	XOR            // 15
+	AUTO           // 16
 )
 
 // codec key map
@@ -78,6 +83,44 @@ type Codec interface {
 	EncodeBlock(src []byte) (dst []byte, err error)
 	DecodeBlock(src []byte) (dst []byte, err error)
 	IsLossless() bool
+}
+
+// send a byte slice through a pipeline of encodings
+func EncodePipeline(src []byte, pipeline []uint8) ([]byte, error) {
+	var (
+		temp = append([]byte(nil), src...)
+		err  error
+	)
+	for _, codecID := range pipeline {
+		currentCodec, ok := CodecMap[codecID]
+		if !ok {
+			return temp, sqerr.New(sqerr.Unsupported, "unsupported codec ID")
+		}
+		temp, err = currentCodec.EncodeBlock(temp)
+		if err != nil {
+			return temp, sqerr.CodedError(err, sqerr.Internal, fmt.Sprintf("failed to encode block of data with codec %d", codecID))
+		}
+	}
+	return temp, nil
+}
+
+// send a byte slice through a pipeline of encodings
+func DecodePipeline(src []byte, pipeline []uint8) ([]byte, error) {
+	var (
+		temp = append([]byte(nil), src...)
+		err  error
+	)
+	for _, codecID := range pipeline {
+		currentCodec, ok := CodecMap[codecID]
+		if !ok {
+			return temp, sqerr.New(sqerr.Unsupported, "unsupported codec ID")
+		}
+		temp, err = currentCodec.DecodeBlock(temp)
+		if err != nil {
+			return temp, sqerr.CodedError(err, sqerr.Internal, fmt.Sprintf("failed to decode block of data with codec %d", codecID))
+		}
+	}
+	return temp, nil
 }
 
 // byte histogram function
