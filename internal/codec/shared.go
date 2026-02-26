@@ -91,8 +91,8 @@ func EncodePipeline(src []byte, pipeline []uint8) ([]byte, error) {
 		temp = append([]byte(nil), src...)
 		err  error
 	)
-	for _, codecID := range pipeline {
-		currentCodec, ok := CodecMap[codecID]
+	for i := range len(pipeline) {
+		currentCodec, ok := CodecMap[pipeline[i]]
 		if !ok {
 			return temp, sqerr.New(sqerr.Unsupported, "unsupported codec ID")
 		}
@@ -104,14 +104,14 @@ func EncodePipeline(src []byte, pipeline []uint8) ([]byte, error) {
 	return temp, nil
 }
 
-// send a byte slice through a pipeline of encodings
+// send a byte slice backwards through a pipeline of decodings
 func DecodePipeline(src []byte, pipeline []uint8) ([]byte, error) {
 	var (
 		temp = append([]byte(nil), src...)
 		err  error
 	)
-	for _, codecID := range pipeline {
-		currentCodec, ok := CodecMap[codecID]
+	for i := len(pipeline) - 1 ; i >= 0 ; i-- {
+		currentCodec, ok := CodecMap[pipeline[i]]
 		if !ok {
 			return temp, sqerr.New(sqerr.Unsupported, "unsupported codec ID")
 		}
