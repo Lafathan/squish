@@ -75,9 +75,7 @@ func Decode(src io.Reader, dst io.Writer) error {
 		}
 		lossless := true
 		// apply the codecs in reverse
-		revCodecList := append([]uint8(nil), codecList...)
-		slices.Reverse(revCodecList)
-		ws.data, err = codec.DecodePipeline(ws.data, revCodecList)
+		ws.data, err = codec.DecodePipeline(ws.data, codecList)
 		if err != nil {
 			return err
 		}
