@@ -1,72 +1,59 @@
 package codec
 
 import (
-	"bytes"
 	"math"
 	"sort"
 )
 
 const (
-	minProbeLen  int = 1 << 14 // minimum size of payload chunk to test compression
-	maxProbeLen  int = 1 << 16 // maximum size of payload chunk to test compression
-	maxPipelines int = 4       // maximum number of pipelines to test
+	maxTProbeLength int = 1 << 13 // max size of test probe for transformed data
+	maxPProbeLength int = 1 << 11 // max size of test probe for compressed data
+	tCandidates     int = 4       // max number of transforms to test
 )
 
-var transforms = [][]uint8{{RAW}, {DELTA}, {XOR}, {BWT, MTF}}
+var transforms = [][]uint8{
+	{RAW},
+	{DELTA},
+	{XOR},
+	{BWT, MTF},
+}
+
+var pipelines = [][]uint8{
+	{RAW},
+	{HUFFMAN},
+	{RLE, HUFFMAN},
+	{RLE2, HUFFMAN},
+	{RLE3, HUFFMAN},
+	{RLE4, HUFFMAN},
+	{ZRLE, HUFFMAN},
+	{LZSS, HUFFMAN},
+}
 
 type AUTOCodec struct {
 	CodecIDs []uint8
 }
 
-type candidatePipeline struct {
-	transform      []uint8
-	transformProbe []byte
-	pipeline       []uint8
-	score          float64
-	payloadSize    uint32
+type transformResult struct {
+	transform        []uint8
+	transformedProbe []byte
+	entropy          float64
+	uniqueRatio      float64
 }
 
-type features struct {
-	e float64 // normalized entropy
-	z float64 // zero run ratio
-	s float64 // single stride run ratio
-	d float64 // double stride run ratio
-	t float64 // triple stride run ratio
-	q float64 // quadruple stride run ratio
-	m float64 // match ratio
-	u float64 // unique values ratio
+type compressionResult struct {
+	pipeline         []uint8
+	compressionRatio float64
 }
 
-func getFeatures(src []byte) features {
-	f := features{}
-	f.e = entropyNorm(src)
-	f.z = zeroRunRatio(src)
-	f.s = runRatio(src, 1)
-	f.d = runRatio(src, 2)
-	f.t = runRatio(src, 3)
-	f.q = runRatio(src, 4)
-	f.m = matchRatio(src)
-	f.u = uniqueRatio(src)
-	return f
-}
-
-func getPayloadProbe(src []byte) []byte {
-	// get a smaller data set to compress for determining the best codecs
-	if len(src) < minProbeLen {
-		return src
-	}
-	// default to 1/8 the block size and clamp it
-	probeLength := len(src) / 8
-	probeLength = max(probeLength, minProbeLen)
-	probeLength = min(probeLength, maxProbeLen)
-	if probeLength == len(src) {
-		// compress the entire payload if it is small
+func getProbe(src []byte, size int) []byte {
+	// get a smaller data set to transform/compress
+	if len(src) <= size {
 		return src
 	}
 	// get the indexes so your data set is from the middle of the payload
-	startIdx := (len(src) - probeLength) / 2
-	endIdx := startIdx + probeLength
-	return src[startIdx:endIdx]
+	start := (len(src) - size) / 2
+	end := start + size
+	return src[start:end]
 }
 
 func entropyNorm(data []byte) float64 {
@@ -90,60 +77,7 @@ func entropyNorm(data []byte) float64 {
 			e -= p[i] * math.Log2(p[i])
 		}
 	}
-	return clampFloat(e/8, 0, 1)
-}
-
-func zeroRunRatio(data []byte) float64 {
-	// calculate the ratio of zero valued data
-	if len(data) == 0 {
-		return 0
-	}
-	var z float64
-	for i := 1; i < len(data); i++ {
-		if data[i] == 0x00 && data[i-1] == 0x00 {
-			z++
-		}
-	}
-	return z / float64(len(data)-1)
-}
-
-func runRatio(data []byte, s int) float64 {
-	// calculate the ratio of runs
-	if len(data) < 3*s || s <= 0 {
-		return 0
-	}
-	var r float64
-	for i := 1; i < len(data)/s; i++ {
-		a := (i - 1) * s
-		b := i * s
-		if bytes.Equal(data[a:a+s], data[b:b+s]) {
-			r++
-		}
-	}
-	return r / float64(len(data)/s-1)
-}
-
-func matchRatio(data []byte) float64 {
-	// calculate the ratio of repeated 4 byte segments
-	if len(data) < 4 {
-		return 0
-	}
-	var (
-		byteLength = 4
-		lookback   = 1 << 12
-		seen       = make(map[uint32]int, len(data))
-		d          float64
-		h          = uint32(data[0])<<24 | uint32(data[1])<<16 | uint32(data[2])<<8 | uint32(data[3])
-	)
-	seen[h] = 0
-	for i := 1; i < len(data)-byteLength; i++ {
-		h = (h << 8) | uint32(data[i+byteLength-1])
-		if last, ok := seen[h]; ok && i-last <= lookback {
-			d++
-		}
-		seen[h] = i
-	}
-	return d / float64(len(data)-byteLength+1)
+	return clampFloat(e/8.0, 0, 1)
 }
 
 func uniqueRatio(data []byte) float64 {
@@ -164,100 +98,57 @@ func uniqueRatio(data []byte) float64 {
 	return count / 256.0
 }
 
-func getScoredPipelines(f features) []candidatePipeline {
-	// choose valid pipelines based on data features
-	var (
-		candidates []candidatePipeline
-		lowEnt     = 1.0 - f.e
-		lowUniq    = 1.0 - f.u
-		zClump     = math.Sqrt(f.z) * (0.35 + 0.65*f.s)
-		runMax     = max(max(f.s, f.d), max(f.t, f.q))
-	)
-	// HUFFMAN score
-	candidates = append(candidates, candidatePipeline{
-		pipeline: []uint8{HUFFMAN},
-		score:    clampFloat(0.70*lowEnt+0.15*lowUniq-0.20*runMax-0.20*f.m, 0, 1),
-	})
-	// RLE-HUFFMAN score
-	candidates = append(candidates, candidatePipeline{
-		pipeline: []uint8{RLE, HUFFMAN},
-		score:    0.65*f.s + 0.35*lowEnt,
-	})
-	// RLE2-HUFFMAN score
-	candidates = append(candidates, candidatePipeline{
-		pipeline: []uint8{RLE2, HUFFMAN},
-		score:    0.65*f.d + 0.35*lowEnt,
-	})
-	// RLE3-HUFFMAN score
-	candidates = append(candidates, candidatePipeline{
-		pipeline: []uint8{RLE3, HUFFMAN},
-		score:    0.65*f.t + 0.35*lowEnt,
-	})
-	// RLE4-HUFFMAN score
-	candidates = append(candidates, candidatePipeline{
-		pipeline: []uint8{RLE4, HUFFMAN},
-		score:    0.65*f.q + 0.35*lowEnt,
-	})
-	// ZRLE-HUFFMAN score
-	candidates = append(candidates, candidatePipeline{
-		pipeline: []uint8{ZRLE, HUFFMAN},
-		score:    0.70*zClump + 0.16*lowEnt + 0.14*f.s,
-	})
-	// LZSS-HUFFMAN score
-	candidates = append(candidates, candidatePipeline{
-		pipeline: []uint8{LZSS, HUFFMAN},
-		score:    clampFloat(0.58*f.m+0.18*lowEnt+0.12*lowUniq-0.55*runMax-0.20*zClump, 0, 1),
-	})
-	return candidates
-}
-
-func getNBestScoredPipelines(c []candidatePipeline, n int) []candidatePipeline {
-	// sort the candidate piplelines based on their score
-	sort.Slice(c, func(i, j int) bool {
-		return c[i].score > c[j].score
-	})
-	return c[:min(n, len(c))]
-}
-
 func (AC *AUTOCodec) EncodeBlock(src []byte) ([]byte, error) {
 	// determines a best-set of transforms and codecs to use and encodes the data
 	if len(src) == 0 {
 		return src, nil
 	}
 	var (
-		probe      = getPayloadProbe(src)
-		candidates []candidatePipeline
+		tProbe   = getProbe(src, maxTProbeLength)                           // probe for testing transforms
+		tResults = make([]transformResult, 0, len(transforms))              // tranformed entropy results
+		cResults = make([]compressionResult, 0, len(pipelines)*tCandidates) // compression ratio results
 	)
-	// get the features and then scored pipelines for all transforms
+	// get the entropy and unique values for the transformed probes
 	for _, transform := range transforms {
-		transformProbe, err := EncodePipeline(probe, transform)
+		tr := transformResult{transform: transform}
+		transformedProbe, err := EncodePipeline(tProbe, transform)
 		if err != nil {
 			continue
 		}
-		features := getFeatures(transformProbe)
-		transformCandidates := getScoredPipelines(features)
-		for _, tpl := range transformCandidates {
-			tpl.transform = transform
-			tpl.transformProbe = transformProbe
-			candidates = append(candidates, tpl)
+		tr.transformedProbe = transformedProbe
+		tr.entropy = entropyNorm(tr.transformedProbe)
+		tr.uniqueRatio = uniqueRatio(tr.transformedProbe)
+		tResults = append(tResults, tr)
+	}
+	// sort the transformed candidates based on entropy and/or unique byte value ratio
+	sort.Slice(tResults, func(i, j int) bool {
+		if tResults[i].entropy == tResults[j].entropy {
+			return tResults[i].uniqueRatio < tResults[j].uniqueRatio
+		} else {
+			return tResults[i].entropy < tResults[j].entropy
+		}
+	})
+	// apply all the pipelines to the best transform data set probes
+	for _, tResult := range tResults[:tCandidates] {
+		for _, pipeline := range pipelines {
+			pp := getProbe(tResult.transformedProbe, maxPProbeLength)
+			c, err := EncodePipeline(pp, pipeline)
+			if err != nil {
+				continue
+			}
+			ce := compressionResult{
+				pipeline:         append(tResult.transform, pipeline...),
+				compressionRatio: float64(len(c)) / float64(len(pp)),
+			}
+			cResults = append(cResults, ce)
 		}
 	}
-	// get the best candidates
-	bestCandidates := getNBestScoredPipelines(candidates, maxPipelines)
-	// apply all the pipelines to the probe data set
-	for i, c := range bestCandidates {
-		payload, err := EncodePipeline(c.transformProbe, c.pipeline)
-		if err != nil {
-			continue
-		}
-		bestCandidates[i].payloadSize = uint32(len(payload))
-	}
-	// sort to pick the best one based on resulting payload size
-	sort.Slice(bestCandidates, func(i, j int) bool {
-		return bestCandidates[i].payloadSize < bestCandidates[j].payloadSize
+	// sort the compression results based on compression ratio
+	sort.Slice(cResults, func(i, j int) bool {
+		return cResults[i].compressionRatio < cResults[j].compressionRatio
 	})
 	// set the AUTOCodec codecIDs so the encoder can put them in the block header
-	AC.CodecIDs = append(bestCandidates[0].transform, bestCandidates[0].pipeline...)
+	AC.CodecIDs = cResults[0].pipeline
 	// get the encoded data
 	out, err := EncodePipeline(src, AC.CodecIDs)
 	return out, err

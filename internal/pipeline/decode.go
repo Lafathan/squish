@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
-	"slices"
 	"squish/internal/codec"
 	"squish/internal/frame"
 	"squish/internal/sqerr"

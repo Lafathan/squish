@@ -98,7 +98,7 @@ func EncodePipeline(src []byte, pipeline []uint8) ([]byte, error) {
 		}
 		temp, err = currentCodec.EncodeBlock(temp)
 		if err != nil {
-			return temp, sqerr.CodedError(err, sqerr.Internal, fmt.Sprintf("failed to encode block of data with codec %d", codecID))
+			return temp, sqerr.CodedError(err, sqerr.Internal, fmt.Sprintf("failed to encode block of data with codec %d", currentCodec))
 		}
 	}
 	return temp, nil
@@ -110,14 +110,14 @@ func DecodePipeline(src []byte, pipeline []uint8) ([]byte, error) {
 		temp = append([]byte(nil), src...)
 		err  error
 	)
-	for i := len(pipeline) - 1 ; i >= 0 ; i-- {
+	for i := len(pipeline) - 1; i >= 0; i-- {
 		currentCodec, ok := CodecMap[pipeline[i]]
 		if !ok {
 			return temp, sqerr.New(sqerr.Unsupported, "unsupported codec ID")
 		}
 		temp, err = currentCodec.DecodeBlock(temp)
 		if err != nil {
-			return temp, sqerr.CodedError(err, sqerr.Internal, fmt.Sprintf("failed to decode block of data with codec %d", codecID))
+			return temp, sqerr.CodedError(err, sqerr.Internal, fmt.Sprintf("failed to decode block of data with codec %d", currentCodec))
 		}
 	}
 	return temp, nil
