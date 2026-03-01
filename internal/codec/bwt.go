@@ -13,6 +13,7 @@ type bwtWorkspace struct {
 	tmpsa   []uint32 // next iterations of radix sorted suffix array indexes
 	rank    []uint32 // ranking of suffix array indexes
 	tmpRank []uint32 // next iteration of sorted rankings of suffix array indexes
+	rankIdx []uint32 // scratch index list for second key sort
 	count   []uint32 // scratch count sort slice to not re-allocate
 	pos     []uint32 // scratch count sort slice for byte values
 	next    []uint32
@@ -53,33 +54,31 @@ func initializeRank(s []uint8, pos, rank, sa []uint32) uint32 {
 	return r
 }
 
-func sortBySecondKey(inSA, outSA, rank, count []uint32, k uint32) {
+func sortBySecondKey(inSA, outSA, rank, rankIdx, count []uint32, k uint32) {
 	// perform count-sort of SA based on ranks of second half of prefix for each suffix
 	var (
 		key    uint32
 		length = uint32(len(inSA))
 		i      int
-		j      uint32
 	)
 	// wipe your histogram
 	wipeSlice(count)
-	// get histogram of ranks for second half of suffix prefix
-	for i = range len(inSA) {
-		j = inSA[i] + k
-		if j >= length {
-			j -= length // fast modulus
+	// get the rank indexes to use in makeing the histogram and performing the count-sort
+	for i = range len(rankIdx) {
+		rankIdx[i] = inSA[i] + k
+		if rankIdx[i] >= length { // fast modulus
+			rankIdx[i] -= length
 		}
-		key = rank[j]
+	}
+	// get histogram of ranks for second half of suffix prefix
+	for i = range len(rankIdx) {
+		key = rank[rankIdx[i]]
 		count[key]++
 	}
 	// perform count-sort
 	cumSum(count)
 	for i = range len(inSA) {
-		j = inSA[i] + k
-		if j >= length {
-			j -= length // fast modulus
-		}
-		key = rank[j]
+		key = rank[rankIdx[i]]
 		outSA[count[key]] = inSA[i]
 		count[key]++
 	}
@@ -106,7 +105,7 @@ func sortByFirstKey(inSA, outSA, rank, count []uint32) {
 	}
 }
 
-func buildCircularSuffixArray(s []byte, pos, count, rank, tmpRank, sa, tmpsa []uint32) {
+func buildCircularSuffixArray(s []byte, pos, count, rank, tmpRank, rankIdx, sa, tmpsa []uint32) {
 	// create and lexicographically sort a circular suffix array
 	// sorting is done by a radix-sort on suffix prefix segments that grow by 2x per iteration
 	// each radix element sort is done using a count-sort algorithm
@@ -127,7 +126,7 @@ func buildCircularSuffixArray(s []byte, pos, count, rank, tmpRank, sa, tmpsa []u
 	// 2. every suffix has a unique rank (maxRank == length)
 	for k := uint32(1); k < length && maxRank < length; k *= 2 {
 		// perform radix sort on second and first suffix prefix
-		sortBySecondKey(sa, tmpsa, rank, count[:maxRank], k)
+		sortBySecondKey(sa, tmpsa, rank, rankIdx, count[:maxRank], k)
 		sa, tmpsa = tmpsa, sa
 		sortByFirstKey(sa, tmpsa, rank, count[:maxRank])
 		sa, tmpsa = tmpsa, sa
@@ -179,10 +178,11 @@ func (BWTCodec) EncodeBlock(src []byte) ([]byte, error) {
 	ws.tmpsa = grow32(ws.tmpsa, len(src))
 	ws.rank = grow32(ws.rank, len(src))
 	ws.tmpRank = grow32(ws.tmpRank, len(src))
+	ws.rankIdx = grow32(ws.rankIdx, len(src))
 	ws.count = grow32(ws.count, len(src))
 	ws.pos = grow32(ws.pos, 256)
 	// build the sorted circular suffix array
-	buildCircularSuffixArray(src, ws.pos, ws.count, ws.rank, ws.tmpRank, ws.sa, ws.tmpsa)
+	buildCircularSuffixArray(src, ws.pos, ws.count, ws.rank, ws.tmpRank, ws.rankIdx, ws.sa, ws.tmpsa)
 	// loop through each sorted circular suffix and grab the last element
 	for i := range length {
 		p = ws.sa[i]
