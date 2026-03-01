@@ -17,7 +17,8 @@ func NewFrameReader(r io.Reader) *frameReader {
 }
 
 func (fr *frameReader) Ready() error {
-	header, err := readHeader(fr.reader) // read in the header of the frame
+	// read in the header of the frame
+	header, err := readHeader(fr.reader)
 	if err != nil {
 		return fmt.Errorf("failed to read frame header: %w", err)
 	}
@@ -26,23 +27,28 @@ func (fr *frameReader) Ready() error {
 }
 
 func (fr *frameReader) Next() (Block, io.Reader, error) {
-	if fr.activePayload != nil && fr.activePayload.N > 0 { // double check for an active payload
+	// grab next payload after verifying current payload has been read
+	if fr.activePayload != nil && fr.activePayload.N > 0 {
 		return Block{}, nil, sqerr.New(sqerr.Internal, "failed to read payload, previous payload still active")
 	}
-	block, err := readBlock(fr) // read in the block header
+	// read in the block header
+	block, err := readBlock(fr)
 	if err != nil {
 		return block, nil, fmt.Errorf("failed to read block: %w", err)
 	}
-	blockError := block.valid() // validity check
+	// check the validity
+	blockError := block.valid()
 	if blockError != nil {
 		return block, nil, blockError
 	}
-	fr.activePayload = &io.LimitedReader{R: fr.reader, N: int64(block.CSize)} // create payload io.reader
+	// create a payload reader to pass to the pipeline
+	fr.activePayload = &io.LimitedReader{R: fr.reader, N: int64(block.CSize)}
 	return block, fr.activePayload, nil
 }
 
 func (fr *frameReader) Drop() error {
-	if fr.activePayload != nil && fr.activePayload.N > 0 { // drop current payload
+	// drop the current payload
+	if fr.activePayload != nil && fr.activePayload.N > 0 {
 		_, err := io.Copy(io.Discard, fr.activePayload)
 		if err != nil {
 			return fmt.Errorf("failed to skip payload: %w", err)
@@ -53,7 +59,8 @@ func (fr *frameReader) Drop() error {
 }
 
 func (fr *frameReader) ReadBytes(n int) ([]byte, error) {
-	bytes := make([]byte, n) // read n bytes from a FrameReader stream
+	// read bytes from a FrameReader stream
+	bytes := make([]byte, n)
 	_, err := io.ReadFull(fr.reader, bytes)
 	if err != nil {
 		return bytes, fmt.Errorf("failed to read bytes from frame reader: %w", err)
@@ -62,6 +69,7 @@ func (fr *frameReader) ReadBytes(n int) ([]byte, error) {
 }
 
 func (fr *frameReader) ReadByte() (byte, error) {
-	bytes, err := fr.ReadBytes(1) // read single byte
+	// read a single byte - implements io.reader
+	bytes, err := fr.ReadBytes(1)
 	return bytes[0], err
 }
