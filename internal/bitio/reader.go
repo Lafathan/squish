@@ -8,8 +8,8 @@ import (
 type bitReader struct {
 	reader       io.Reader // io.reader for reading a stream
 	buffer       uint64    // buffer holding current streamed bits
-	nBits        int       // number of bits currently not read from buffer (cursor)
-	readBuffer   [8]byte   // bytes to be read when filling in the buffer
+	nBits        int       // number of bits currently in the buffer (cursor)
+	sReadBuffer  [8]byte   // scratch
 	sBytesToRead int       // scratch
 }
 
@@ -18,36 +18,28 @@ func NewBitReader(r io.Reader) *bitReader {
 }
 
 func (br *bitReader) ReadBits(nbits int) (uint64, error) {
-	if br.nBits < nbits { // read more bytes to have enough bits
-		br.sBytesToRead = (int(nbits) - int(br.nBits) + 7) / 8 // calculate the number of bytes needed
-		if int(br.nBits)+br.sBytesToRead*8 > 64 {              // return if reading too many bytes at once
+	// reads bytes from an io.reader source and returns an unsigned 64 bit integer containing the requested number of bits
+	// extra bits read in when reading bytes are saved in a buffer and prepended to the next request of bits.
+	if br.nBits < nbits {
+		// if you don't have enough bits in the buffer, determine how many more bytes you need and read them into the buffer
+		br.sBytesToRead = (int(nbits) - int(br.nBits) + 7) / 8
+		if int(br.nBits)+br.sBytesToRead*8 > 64 {
 			return 0, fmt.Errorf("bitreader error when reading %d bytes: %w", br.sBytesToRead, io.ErrShortBuffer)
 		}
-		_, err := io.ReadFull(br.reader, br.readBuffer[:br.sBytesToRead]) // read in the new data
+		_, err := io.ReadFull(br.reader, br.sReadBuffer[:br.sBytesToRead])
 		if err != nil {
 			return 0, fmt.Errorf("bitreader error when reading %d bytes: %w", br.sBytesToRead, err)
 		}
-		for i := range br.sBytesToRead { // add in the new data to the buffer
-			br.buffer = (br.buffer << 8) | uint64(br.readBuffer[i]) // shift buffer and add the new byte
-			br.nBits += 8                                           // add to total bits in the buffer
+		for i := range br.sBytesToRead {
+			// shift the current buffer data and add the new bytes
+			br.buffer = (br.buffer << 8) | uint64(br.sReadBuffer[i])
+			br.nBits += 8
 		}
 	}
-	// you want 6 bits
-	// nBits  = 10
-	// buffer = 1011001100 (read in another byte)
-	// mask = 1000000 - 1 = 0111111 (bit mask for six bits you want)
-	// right shift the buffer by unread bits - desired bits (10 - 6 = 4)
-	// shifted buffer = 0000101100
-	// and with mask  =     111111 (prevent high bits from leaking through)
-	// result         =     101100var mask uint64
-	var mask uint64
-	if nbits == 64 {
-		mask = ^uint64(0)
-	} else {
-		mask = (uint64(1) << nbits) - 1
-	}
-	out := (br.buffer >> (br.nBits - nbits)) & mask
-	br.nBits -= nbits                // count down to not re-read bits
-	br.buffer &= (1 << br.nBits) - 1 // mask it down to prevent overflow
+	// shift the buffer down to just what you need, mask to the desired bits
+	out := (br.buffer >> (br.nBits - nbits)) & mask64(nbits)
+	// keep track of the bit count and the new buffer (masked down to preven overflow)
+	br.nBits -= nbits
+	br.buffer &= mask64(br.nBits)
 	return out, nil
 }
