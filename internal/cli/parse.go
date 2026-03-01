@@ -11,8 +11,14 @@ import (
 	"strings"
 )
 
+const (
+	stdInOutKey   = "-"
+	pipelineSplit = "-"
+)
+
 func openInput(path string) (*os.File, func(), error) {
-	if path == "" || path == "-" {
+	// open an input or fall back to Stdin
+	if path == "" || path == stdInOutKey {
 		return os.Stdin, func() {}, nil
 	}
 	f, err := os.Open(path)
@@ -26,7 +32,8 @@ func openInput(path string) (*os.File, func(), error) {
 }
 
 func openOutput(path string) (*os.File, func(), error) {
-	if path == "" || path == "-" {
+	// open an output or fall back to Stdout
+	if path == "" || path == stdInOutKey {
 		return os.Stdout, func() {}, nil
 	}
 	f, err := os.Create(path)
@@ -40,11 +47,12 @@ func openOutput(path string) (*os.File, func(), error) {
 }
 
 func parseCodecPipeline(pipeline string) ([]uint8, error) {
+	// parse a string of codec keys seperated by "-" into a slice of codecID values
 	pipeline = strings.ToUpper(pipeline)
 	for alias, expandedCodecs := range codec.CodecAliases {
 		pipeline = strings.ReplaceAll(pipeline, alias, expandedCodecs)
 	}
-	codecStrings := strings.Split(pipeline, "-")
+	codecStrings := strings.Split(pipeline, pipelineSplit)
 	codecList := make([]uint8, 0, len(codecStrings))
 	for _, cString := range codecStrings {
 		if cString == "" {
@@ -63,6 +71,7 @@ func parseCodecPipeline(pipeline string) ([]uint8, error) {
 }
 
 func parseBlockSize(size string) (int, error) {
+	// parse a string of blocksize into a value of byte length
 	var (
 		matched       bool = false
 		blockByteSize int  = 0
@@ -88,6 +97,7 @@ func parseBlockSize(size string) (int, error) {
 }
 
 func parseChecksum(csum string) (byte, error) {
+	// parse checksum string
 	var checksumFlag byte
 	switch strings.ToLower(csum) {
 	case "":
