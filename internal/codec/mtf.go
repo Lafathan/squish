@@ -1,63 +1,68 @@
 package codec
 
-import "container/list"
-
 type MTFCodec struct{}
 
-func getAlphabet() *list.List {
-	// build a doubly linked list for an byte alphabet
-	alphabet := list.New()
-	for i := range 256 {
-		alphabet.PushFront(byte(i))
+func makeAlphabet() ([256]byte, [256]byte) {
+	// make an alphabet along with a positional reference array
+	var sym, pos [256]byte
+	for i := range len(sym) {
+		j := byte(i)
+		sym[i] = j
+		pos[j] = j
 	}
-	return alphabet
+	return sym, pos
 }
 
-func mtf(src []byte, encode bool) ([]byte, error) {
-	// encode src using move-to-front transform (MTF)
-	if len(src) == 0 {
-		return src, nil
-	}
-	var (
-		srcIdx            = 0
-		index       uint8 = 0 // for counting depth of value in dictionary
-		alphabet          = getAlphabet()
-		comparison  byte  // what value to compare to
-		replacement byte  // what value to replace with
-	)
-	for srcIdx < len(src) {
-		// go through the alphabet until you encounter the current value
-		for e := alphabet.Front(); e != nil; e = e.Next() {
-			if encode {
-				// for encoding compare input to alphabet value, replace with index of match
-				comparison = e.Value.(byte)
-				replacement = index
-			} else {
-				// for decoding compare input to indiex value, replace with value of alphabet
-				comparison = index
-				replacement = e.Value.(byte)
-			}
-			// perform comparison, moving matching alphabet element to the front
-			if src[srcIdx] == comparison {
-				src[srcIdx] = replacement
-				alphabet.MoveToFront(e)
-				index = 0
-				break
-			} else {
-				index++
-			}
+func (MTFCodec) EncodeBlock(src []byte) ([]byte, error) {
+	// encode src using the move-to-front transform
+	sym, pos := makeAlphabet()
+	// loop through the source performing the mtf transform
+	for sIdx := range len(src) {
+		// get the value and replace it with the index of where it is in the alphabet
+		sSym := src[sIdx]
+		aIdx := pos[sSym]
+		src[sIdx] = aIdx
+		// nothing else to do if it is already in the front
+		if aIdx == 0 {
+			continue
 		}
-		srcIdx++
+		// otherwise shift all other symbols to the right along with their alphabet indexes
+		for j := aIdx; j > 0; j-- {
+			x := sym[j-1]
+			sym[j] = x
+			pos[x] = j
+		}
+		// put the current symbol up front
+		sym[0] = sSym
+		pos[sSym] = 0
 	}
 	return src, nil
 }
 
-func (MTFCodec) EncodeBlock(src []byte) ([]byte, error) {
-	return mtf(src, true)
-}
-
 func (MTFCodec) DecodeBlock(src []byte) ([]byte, error) {
-	return mtf(src, false)
+	// decode src using the inverse move-to-front transform
+	sym, pos := makeAlphabet()
+	// loop through the source performing the inverse mtf transform
+	for sIdx := range len(src) {
+		// get the index and replace it with the value at that index in the alphabet
+		aIdx := src[sIdx]
+		sSym := sym[aIdx]
+		src[sIdx] = sSym
+		// nothing else to do if it is already in the front
+		if aIdx == 0 {
+			continue
+		}
+		// otherwise shift all other symbols to the right along with their alphabet indexes
+		for j := aIdx; j > 0; j-- {
+			x := sym[j-1]
+			sym[j] = x
+			pos[x] = j
+		}
+		// put the current symbol up front
+		sym[0] = sSym
+		pos[sSym] = 0
+	}
+	return src, nil
 }
 
 func (MTFCodec) IsLossless() bool {
