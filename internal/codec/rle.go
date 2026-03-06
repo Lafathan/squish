@@ -1,15 +1,17 @@
 package codec
 
-import "squish/internal/sqerr"
+import (
+	"encoding/binary"
+	"squish/internal/sqerr"
+)
 
 const (
-	maxRunLength uint8   = 255  // max run length
-	tolAlpha     float64 = 0.15 // tolerance sigma decay
-	tolMin       float64 = 2.0  // residual that will always result in conforming to anchor
-	tolMax       float64 = 6.0  // residual that will always result in a new anchor
-	tolK         float64 = 1.5  // variance to tolerance factor
-	tolBand      uint8   = 1    // wiggle allowance when considering new anchor candidate
-	tolHang      uint8   = 3    // required repetitions for candidate to become new anchor
+	tolAlpha float64 = 0.15 // tolerance sigma decay
+	tolMin   float64 = 2.0  // residual that will always result in conforming to anchor
+	tolMax   float64 = 6.0  // residual that will always result in a new anchor
+	tolK     float64 = 1.5  // variance to tolerance factor
+	tolBand  uint8   = 1    // wiggle allowance when considering new anchor candidate
+	tolHang  uint8   = 3    // required repetitions for candidate to become new anchor
 )
 
 type RLECodec struct {
@@ -85,12 +87,12 @@ func (t *RLTolerance) updateTolerance(data []byte) {
 	}
 }
 
-func encodeUpdateGroup(runLen uint8, flagByte *byte, flagBit uint8, runBytes []byte, groupBytes *[]byte) {
+func encodeUpdateGroup(runLen uint64, flagByte *byte, flagBit uint8, runBytes []byte, groupBytes *[]byte) {
 	// update group associated with current flag byte
 	if runLen >= 2 {
 		// update the current flag bit to represent a run, then append the length and the literal bytes
 		*flagByte |= (1 << flagBit)
-		*groupBytes = append(*groupBytes, runLen)
+		*groupBytes = binary.AppendUvarint(*groupBytes, runLen)
 		*groupBytes = append(*groupBytes, runBytes...)
 	} else {
 		// no need to update the flag bit (defaults to 0), then append the literal bytes
@@ -106,7 +108,7 @@ func (RC RLECodec) EncodeBlock(src []byte) ([]byte, error) {
 	var (
 		flagBit    uint8        = 7                                    // current bit representing a pair or not
 		flagByte   byte         = 0x00                                 // byte holding flag bits
-		runLen     uint8        = 1                                    // current length of the run
+		runLen     uint64       = 1                                    // current length of the run
 		runBytes   []byte       = nil                                  // current bytes being repeated
 		groupBytes []byte       = make([]byte, 0, 8*(RC.byteLength+1)) // current set of encoded bytes
 		srcIdx     int          = 0                                    // index as you traverse the source
@@ -124,7 +126,7 @@ func (RC RLECodec) EncodeBlock(src []byte) ([]byte, error) {
 			// initialize if necessary
 			runBytes = srcBytes
 			runLen = 1
-		} else if equalSliceWithinTolerance(runBytes, srcBytes, tol.tolerance) && runLen < maxRunLength {
+		} else if equalSliceWithinTolerance(runBytes, srcBytes, tol.tolerance) {
 			// increment the run
 			runLen++
 		} else {
@@ -153,7 +155,8 @@ func (RC RLECodec) EncodeBlock(src []byte) ([]byte, error) {
 	return out, nil
 }
 
-func decodeGetFlagAndRunLength(flagByte *byte, flagBit uint8, runLen *int, srcIdx *int, src []byte) error {
+// func decodeGetFlagAndRunLength(flagByte *byte, flagBit uint8, runLen *int, srcIdx *int, src []byte) error {
+func decodeGetFlagAndRunLength(flagByte *byte, flagBit uint8, runLen *uint64, srcIdx *int, src []byte) error {
 	// grab the current flag bit, read a new flag if necessary, and update to the next run length
 	if flagBit == 7 {
 		// read a new flag bit if necessary
@@ -165,8 +168,12 @@ func decodeGetFlagAndRunLength(flagByte *byte, flagBit uint8, runLen *int, srcId
 	}
 	// read the next run length if flag bit informs of run length
 	if *flagByte&(1<<flagBit) > 0 {
-		*runLen = int(src[*srcIdx])
-		*srcIdx++
+		var bytes int
+		*runLen, bytes = binary.Uvarint(src[*srcIdx:])
+		if bytes < 1 {
+			return sqerr.New(sqerr.Corrupt, "RLE encountered insufficient length run")
+		}
+		*srcIdx += bytes
 	} else {
 		*runLen = 1 // otherwise it is just a single literal
 	}
@@ -179,18 +186,19 @@ func (RC RLECodec) DecodeBlock(src []byte) ([]byte, error) {
 		return src, nil
 	}
 	var (
-		srcIdx            = 0 // where you are in the source
-		flagBit   uint8   = 7 // current bit index in the flag byte
-		flagByte  byte        // current flag byte
-		runLen    = 1         // current run length
-		runBytes  []byte      // current bytes to be repeated
-		outLength = 0         // first pass variable for allocating for decoding
-		flush     = false     // whether or not you are at the end
+		srcIdx           = 0     // where you are in the source
+		flagBit   uint8  = 7     // current bit index in the flag byte
+		flagByte  byte           // current flag byte
+		runLen    uint64 = 1     // current run length
+		runBytes  []byte         // current bytes to be repeated
+		outLength uint64 = 0     // first pass variable for allocating for decoding
+		flush            = false // whether or not you are at the end
 	)
 	// first pass for allocating output length
 	for srcIdx < len(src) {
+		//decodeGetFlagAndRunLength(&flagByte, flagBit, &runLen, &srcIdx, src)
 		decodeGetFlagAndRunLength(&flagByte, flagBit, &runLen, &srcIdx, src)
-		outLength += runLen * RC.byteLength
+		outLength += runLen * uint64(RC.byteLength)
 		srcIdx += RC.byteLength
 		if srcIdx >= len(src) {
 			break
@@ -215,7 +223,8 @@ func (RC RLECodec) DecodeBlock(src []byte) ([]byte, error) {
 		}
 		srcIdx += len(runBytes)
 		if len(runBytes) < RC.byteLength || srcIdx >= len(src) {
-			flush = true // flush if literal was not full length (RC.byteLength)
+			// flush if literal was not full length (RC.byteLength)
+			flush = true
 		}
 		if flagBit == 0 || flush {
 			if flush {
