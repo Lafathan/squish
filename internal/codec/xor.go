@@ -2,34 +2,29 @@ package codec
 
 type XORCodec struct{}
 
-func xor(src []byte, encode bool) ([]byte, error) {
+func (XORCodec) EncodeBlock(src []byte) ([]byte, error) {
 	// encode src using an XOR transform
 	if len(src) < 2 {
 		return src, nil
 	}
-	var (
-		out = make([]byte, len(src))
-	)
-	out[0] = src[0]
-	if encode {
-		for i := 1; i < len(src); i++ {
-			out[i] = src[i] ^ src[i-1]
-		}
-	} else {
-		for i := 1; i < len(src); i++ {
-			out[i] = src[i] ^ out[i-1]
-		}
+	var prev = src[0]
+	for i := 1; i < len(src); i++ {
+		src[i], prev = src[i]^prev, src[i]
 	}
-	return out, nil
-
-}
-
-func (XORCodec) EncodeBlock(src []byte) ([]byte, error) {
-	return xor(src, true)
+	return src, nil
 }
 
 func (XORCodec) DecodeBlock(src []byte) ([]byte, error) {
-	return xor(src, false)
+	// decode src using an XOR transform
+	if len(src) < 2 {
+		return src, nil
+	}
+	var prev = src[0]
+	for i := 1; i < len(src); i++ {
+		src[i] = src[i] ^ prev
+		prev = src[i]
+	}
+	return src, nil
 }
 
 func (XORCodec) IsLossless() bool {
