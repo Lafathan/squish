@@ -13,12 +13,12 @@ const (
 	RLE3           // 3
 	RLE4           // 4
 	ZRLE           // 5
-	HUFFMAN        // 6
-	LZSS           // 7
-	LRLE           // 8
-	LRLE2          // 9
-	LRLE3          // 10
-	LRLE4          // 11
+	LZSS           // 6
+	LRLE           // 7
+	LRLE2          // 8
+	LRLE3          // 9
+	LRLE4          // 10
+	HUFFMAN        // 11
 	MTF            // 12
 	BWT            // 13
 	DELTA          // 14
@@ -29,19 +29,20 @@ const (
 // codec key map
 var CodecMap = map[uint8]Codec{
 	// lossless codecs
-	RAW:     RAWCodec{},
-	RLE:     RLECodec{byteLength: 1, lossless: true},
-	RLE2:    RLECodec{byteLength: 2, lossless: true},
-	RLE3:    RLECodec{byteLength: 3, lossless: true},
-	RLE4:    RLECodec{byteLength: 4, lossless: true},
-	ZRLE:    ZRLECodec{},
-	HUFFMAN: HUFFMANCodec{},
-	LZSS:    LZSSCodec{},
+	RAW:  RAWCodec{},
+	RLE:  RLECodec{byteLength: 1, lossless: true},
+	RLE2: RLECodec{byteLength: 2, lossless: true},
+	RLE3: RLECodec{byteLength: 3, lossless: true},
+	RLE4: RLECodec{byteLength: 4, lossless: true},
+	ZRLE: ZRLECodec{},
+	LZSS: LZSSCodec{},
 	// lossy codecs
 	LRLE:  RLECodec{byteLength: 1, lossless: false},
 	LRLE2: RLECodec{byteLength: 2, lossless: false},
 	LRLE3: RLECodec{byteLength: 3, lossless: false},
 	LRLE4: RLECodec{byteLength: 4, lossless: false},
+	// entropy codecs
+	HUFFMAN: HUFFMANCodec{},
 	// transforms
 	MTF:   MTFCodec{},
 	BWT:   BWTCodec{},
@@ -59,12 +60,12 @@ var StringToCodecIDMap = map[string]uint8{
 	"RLE3":    RLE3,
 	"RLE4":    RLE4,
 	"ZRLE":    ZRLE,
-	"HUFFMAN": HUFFMAN,
 	"LZSS":    LZSS,
 	"LRLE":    LRLE,
 	"LRLE2":   LRLE2,
 	"LRLE3":   LRLE3,
 	"LRLE4":   LRLE4,
+	"HUFFMAN": HUFFMAN,
 	"MTF":     MTF,
 	"BWT":     BWT,
 	"DELTA":   DELTA,
