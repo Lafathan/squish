@@ -2,33 +2,29 @@ package codec
 
 type DELTACodec struct{}
 
-func delta(src []byte, encode bool) ([]byte, error) {
+func (DELTACodec) EncodeBlock(src []byte) ([]byte, error) {
 	// encode source using a delta encoding
 	if len(src) < 2 {
 		return src, nil
 	}
-	var (
-		out = make([]byte, len(src))
-	)
-	out[0] = src[0]
-	if encode {
-		for i := 1; i < len(src); i++ {
-			out[i] = byte(int8(src[i]) - int8(src[i-1]))
-		}
-	} else {
-		for i := 1; i < len(src); i++ {
-			out[i] = byte(int8(src[i]) + int8(out[i-1]))
-		}
+	var prev = int8(src[0])
+	for i := 1; i < len(src); i++ {
+		prev, src[i] = int8(src[i]), byte(int8(src[i])-prev)
 	}
-	return out, nil
-}
-
-func (DELTACodec) EncodeBlock(src []byte) ([]byte, error) {
-	return delta(src, true)
+	return src, nil
 }
 
 func (DELTACodec) DecodeBlock(src []byte) ([]byte, error) {
-	return delta(src, false)
+	// decode source using a delta encoding
+	if len(src) < 2 {
+		return src, nil
+	}
+	var prev = int8(src[0])
+	for i := 1; i < len(src); i++ {
+		src[i] = byte(int8(src[i]) + prev)
+		prev = int8(src[i])
+	}
+	return src, nil
 }
 
 func (DELTACodec) IsLossless() bool {
