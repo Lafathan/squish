@@ -126,16 +126,9 @@ func DecodePipeline(src []byte, pipeline []uint8) ([]byte, error) {
 
 // byte histogram function
 func byteHistogram(bytes []byte, s []uint32) {
-	wipeSlice(s)
+	clear(s)
 	for i := range len(bytes) {
 		s[bytes[i]]++
-	}
-}
-
-// wipe slice function
-func wipeSlice(s []uint32) {
-	for i := range len(s) {
-		s[i] = 0
 	}
 }
 
@@ -153,11 +146,13 @@ func cumSum(s []uint32) {
 }
 
 // grow a slice
-func grow32(slice []uint32, length int) []uint32 {
+func grow32[T int32 | uint32](slice []T, length int) []T {
 	if cap(slice) < length {
-		return make([]uint32, length)
+		return make([]T, length)
 	}
-	return slice[:length]
+	s := slice[:length]
+	clear(s)
+	return s
 }
 
 // clamp a float64 value
