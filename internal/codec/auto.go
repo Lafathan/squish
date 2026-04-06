@@ -86,10 +86,10 @@ func uniqueRatio(data []byte) float64 {
 		return 0
 	}
 	var (
-		seen          = make([]uint32, 256)
+		seen          = make([]int32, 256)
 		count float64 = 0
 	)
-	byteHistogram(data, seen)
+	histogram(data, seen)
 	for i := range len(seen) {
 		if seen[i] > 0 {
 			count++

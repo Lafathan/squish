@@ -125,18 +125,18 @@ func DecodePipeline(src []byte, pipeline []uint8) ([]byte, error) {
 }
 
 // byte histogram function
-func byteHistogram(bytes []byte, s []uint32) {
-	clear(s)
-	for i := range len(bytes) {
-		s[bytes[i]]++
+func histogram[T byte | int32](data []T, freq []int32) {
+	clear(freq)
+	for _, v := range data {
+		freq[v]++
 	}
 }
 
 // create cumulative sum
-func cumSum(s []uint32) {
+func cumSum(s []int32) {
 	var (
-		sum uint32 = 0
-		val uint32
+		sum int32 = 0
+		val int32
 	)
 	for i := range len(s) {
 		val = s[i]
