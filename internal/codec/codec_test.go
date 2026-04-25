@@ -50,6 +50,7 @@ func makeRepeating(n int) []byte {
 	}
 	return out
 }
+
 func makeRamp(n int) []byte {
 	out := make([]byte, n)
 	for i := range n {
