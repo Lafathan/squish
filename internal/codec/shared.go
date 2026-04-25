@@ -156,8 +156,14 @@ func grow32[T int32 | uint32](slice []T, length int) []T {
 }
 
 // clamp a float64 value
-func clampFloat(f, lo, hi float64) float64 {
-	return min(max(f, lo), hi)
+func clampFloat[T float32 | float64](f, lo, hi T) T {
+	if f < lo {
+		return lo
+	}
+	if f > hi {
+		return hi
+	}
+	return f
 }
 
 // absolute byte delta

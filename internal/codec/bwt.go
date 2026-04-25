@@ -78,7 +78,6 @@ func getBuckets(data, freq, bktH, bktT []int32, dataMax int) {
 }
 
 func placeLMS(data, sa, bktT, lengths []int32) int {
-	clear(lengths)
 	numLMS := 0
 	// determine LMS status on the fly
 	c0, c1, isTypeS, prevLMS := data[len(data)-1], int32(0), false, int32(len(data))-1

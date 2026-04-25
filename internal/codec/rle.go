@@ -6,10 +6,10 @@ import (
 )
 
 const (
-	tolAlpha float64 = 0.15 // tolerance sigma decay
-	tolMin   float64 = 2.0  // residual that will always result in conforming to anchor
-	tolMax   float64 = 6.0  // residual that will always result in a new anchor
-	tolK     float64 = 1.5  // variance to tolerance factor
+	tolAlpha float32 = 0.15 // tolerance sigma decay
+	tolMin   float32 = 2.0  // residual that will always result in conforming to anchor
+	tolMax   float32 = 6.0  // residual that will always result in a new anchor
+	tolK     float32 = 1.5  // variance to tolerance factor
 	tolBand  uint8   = 1    // wiggle allowance when considering new anchor candidate
 	tolHang  uint8   = 3    // required repetitions for candidate to become new anchor
 )
@@ -21,8 +21,8 @@ type RLECodec struct {
 
 type RLTolerance struct {
 	anchor    []byte    // anchor value to snap values to
-	sigma     []float64 // current weighted error value
-	tolerance []float64 // tolerance used for snapping
+	sigma     []float32 // current weighted error value
+	tolerance []float32 // tolerance used for snapping
 	candidate []byte    // potential new anchor
 	count     []int     // current run length of candidate
 }
@@ -30,20 +30,20 @@ type RLTolerance struct {
 func newTolerance(n int) *RLTolerance {
 	return &RLTolerance{
 		anchor:    make([]byte, n),
-		sigma:     make([]float64, n),
-		tolerance: make([]float64, n),
+		sigma:     make([]float32, n),
+		tolerance: make([]float32, n),
 		candidate: make([]byte, n),
 		count:     make([]int, n),
 	}
 }
 
-func equalSliceWithinTolerance(slice1 []byte, slice2 []byte, tol []float64) bool {
+func equalSliceWithinTolerance(slice1 []byte, slice2 []byte, tol []float32) bool {
 	// element-wise slice comparison
 	if len(slice1) != len(slice2) {
 		return false
 	}
 	for i := range len(slice1) {
-		if float64(absByteDiff(slice1[i], slice2[i])) > tol[i] {
+		if float32(absByteDiff(slice1[i], slice2[i])) > tol[i] {
 			return false
 		}
 	}
@@ -53,17 +53,17 @@ func equalSliceWithinTolerance(slice1 []byte, slice2 []byte, tol []float64) bool
 func (t *RLTolerance) updateTolerance(data []byte) {
 	// update tolerances based on new data point
 	var (
-		residual byte
-		tol      float64
+		residual float32
+		tol      float32
 	)
 	for i := range len(t.tolerance) {
 		// calculate the new tolerance based on a residuals
-		residual = absByteDiff(t.anchor[i], data[i])
-		t.sigma[i] = (1-tolAlpha)*t.sigma[i] + tolAlpha*float64(residual)
+		residual = float32(absByteDiff(t.anchor[i], data[i]))
+		t.sigma[i] = (1-tolAlpha)*t.sigma[i] + tolAlpha*residual
 		tol = tolMin + tolK*t.sigma[i]
 		t.tolerance[i] = clampFloat(tol, tolMin, tolMax)
 		// track and update candidate for new anchor values
-		if float64(residual) <= t.tolerance[i] {
+		if residual <= t.tolerance[i] {
 			// track repeats of valid candidates
 			if absByteDiff(t.candidate[i], data[i]) <= tolBand {
 				t.count[i]++
@@ -87,12 +87,12 @@ func (t *RLTolerance) updateTolerance(data []byte) {
 	}
 }
 
-func encodeUpdateGroup(runLen uint64, flagByte *byte, flagBit uint8, runBytes []byte, groupBytes *[]byte) {
+func encodeUpdateGroup(runLen uint32, flagByte *byte, flagBit uint8, runBytes []byte, groupBytes *[]byte) {
 	// update group associated with current flag byte
 	if runLen >= 2 {
 		// update the current flag bit to represent a run, then append the length and the literal bytes
 		*flagByte |= (1 << flagBit)
-		*groupBytes = binary.AppendUvarint(*groupBytes, runLen)
+		*groupBytes = binary.AppendUvarint(*groupBytes, uint64(runLen))
 		*groupBytes = append(*groupBytes, runBytes...)
 	} else {
 		// no need to update the flag bit (defaults to 0), then append the literal bytes
@@ -108,7 +108,7 @@ func (RC RLECodec) EncodeBlock(src []byte) ([]byte, error) {
 	var (
 		flagBit    uint8        = 7                                    // current bit representing a pair or not
 		flagByte   byte         = 0x00                                 // byte holding flag bits
-		runLen     uint64       = 1                                    // current length of the run
+		runLen     uint32       = 1                                    // current length of the run
 		runBytes   []byte       = nil                                  // current bytes being repeated
 		groupBytes []byte       = make([]byte, 0, 8*(RC.byteLength+1)) // current set of encoded bytes
 		srcIdx     int          = 0                                    // index as you traverse the source
