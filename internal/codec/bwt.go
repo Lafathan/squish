@@ -226,7 +226,6 @@ func mapID(sa, ids []int32) {
 }
 
 func unmapID(data, sa, ids, bktT []int32, numLMS int) {
-	// copy(ids[:numLMS+1], sa[len(sa)-numLMS:])
 	copy(ids[:numLMS], sa[len(sa)-numLMS:])
 	clear(sa)
 	end := len(ids) - 1

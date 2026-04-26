@@ -53,22 +53,24 @@ func equalSliceWithinTolerance(slice1 []byte, slice2 []byte, tol []float32) bool
 func (t *RLTolerance) updateTolerance(data []byte) {
 	// update tolerances based on new data point
 	var (
-		residual float32
-		tol      float32
+		r   float32
+		tol float32
 	)
 	for i := range len(t.tolerance) {
+		// grab some useful values
+		s, d := t.sigma[i], data[i]
 		// calculate the new tolerance based on a residuals
-		residual = float32(absByteDiff(t.anchor[i], data[i]))
-		t.sigma[i] = (1-tolAlpha)*t.sigma[i] + tolAlpha*residual
-		tol = tolMin + tolK*t.sigma[i]
+		r = float32(absByteDiff(t.anchor[i], d))
+		t.sigma[i] = s - (s+r)*tolAlpha
+		tol = tolMin + tolK*s
 		t.tolerance[i] = clampFloat(tol, tolMin, tolMax)
 		// track and update candidate for new anchor values
-		if residual <= t.tolerance[i] {
+		if r <= t.tolerance[i] {
 			// track repeats of valid candidates
-			if absByteDiff(t.candidate[i], data[i]) <= tolBand {
+			if absByteDiff(t.candidate[i], d) <= tolBand {
 				t.count[i]++
 			} else {
-				t.candidate[i] = data[i]
+				t.candidate[i] = d
 				t.count[i] = 1
 			}
 			// choose a new anchor if candidate repeats enough
@@ -78,9 +80,9 @@ func (t *RLTolerance) updateTolerance(data []byte) {
 			}
 		} else {
 			// pick a new anchor if residual is way outside of the window
-			t.anchor[i] = data[i]
+			t.anchor[i] = d
 			t.sigma[i] = 0
-			t.candidate[i] = data[i]
+			t.candidate[i] = d
 			t.count[i] = 0
 			t.tolerance[i] = tolMin
 		}
@@ -106,15 +108,15 @@ func (RC RLECodec) EncodeBlock(src []byte) ([]byte, error) {
 		return src, nil
 	}
 	var (
-		flagBit    uint8        = 7                                    // current bit representing a pair or not
-		flagByte   byte         = 0x00                                 // byte holding flag bits
-		runLen     uint32       = 1                                    // current length of the run
-		runBytes   []byte       = nil                                  // current bytes being repeated
-		groupBytes []byte       = make([]byte, 0, 8*(RC.byteLength+1)) // current set of encoded bytes
-		srcIdx     int          = 0                                    // index as you traverse the source
-		srcBytes   []byte       = nil                                  // current bytes from the source
-		tol        *RLTolerance = newTolerance(RC.byteLength)          // noise and tolerance calculations
-		out        []byte       = make([]byte, 0, len(src)*9/8)        // encoded bytes
+		flagBit    uint8        = 7                                // current bit representing a pair or not
+		flagByte   byte         = 0x00                             // byte holding flag bits
+		runLen     uint32       = 1                                // current length of the run
+		runBytes   []byte       = nil                              // current bytes being repeated
+		groupBytes []byte       = make([]byte, 0, 8*RC.byteLength) // current set of encoded bytes
+		srcIdx     int          = 0                                // index as you traverse the source
+		srcBytes   []byte       = nil                              // current bytes from the source
+		tol        *RLTolerance = newTolerance(RC.byteLength)      // noise and tolerance calculations
+		out        []byte       = make([]byte, 0, len(src)*9/8)    // encoded bytes
 	)
 	for srcIdx < len(src) {
 		srcBytes = src[srcIdx:min(srcIdx+RC.byteLength, len(src))]
@@ -155,7 +157,6 @@ func (RC RLECodec) EncodeBlock(src []byte) ([]byte, error) {
 	return out, nil
 }
 
-// func decodeGetFlagAndRunLength(flagByte *byte, flagBit uint8, runLen *int, srcIdx *int, src []byte) error {
 func decodeGetFlagAndRunLength(flagByte *byte, flagBit uint8, runLen *uint64, srcIdx *int, src []byte) error {
 	// grab the current flag bit, read a new flag if necessary, and update to the next run length
 	if flagBit == 7 {

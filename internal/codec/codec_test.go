@@ -1,7 +1,7 @@
 package codec
 
 import (
-	"crypto/rand"
+	"math/rand/v2"
 	"slices"
 	"testing"
 )
@@ -34,7 +34,9 @@ var datasets = []struct {
 
 func makeRandom(n int) []byte {
 	out := make([]byte, n)
-	_, _ = rand.Read(out)
+	var seed [32]byte
+	cha := rand.NewChaCha8(seed)
+	_, _ = cha.Read(out)
 	return out
 }
 
