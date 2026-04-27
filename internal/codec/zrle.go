@@ -5,6 +5,25 @@ import (
 	"squish/internal/sqerr"
 )
 
+// ======================================================================================
+// ZRLE codec
+// This code works by taking strings of zeros in the data set and replacing them with
+// zero valued byte followed by an unsigned variable length integer representation of the
+// run length. All non-zero values are carried over to the output.
+//
+// examples:
+//	| Data                                           | Compressed
+//  | 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00 | 0x00, 0x05, 0x01, 0x00, 0x02
+//  | 0x00, 0x00, 0x01, 0x00, 0x02                   | 0x00, 0x02, 0x01, 0x00, 0x01, 0x02
+//  | 0x00 repeated 69420 times, 0x01                | 0x00, 0x44, 0x9E, 0x2C, 0x01
+//
+// The variable length integer is defined in the binary package as the following:
+// - unsigned integers are serialized 7 bits at a time, starting with the
+//   least significant bits
+// - the most significant bit (msb) in each output byte indicates if there
+//   is a continuation byte (msb = 1)
+// ======================================================================================
+
 type ZRLECodec struct{}
 
 func (ZRLECodec) EncodeBlock(src []byte) ([]byte, error) {
@@ -18,16 +37,18 @@ func (ZRLECodec) EncodeBlock(src []byte) ([]byte, error) {
 		out    []byte = make([]byte, 0, len(src))
 	)
 	for srcIdx < len(src) {
-		// encode all zeros with a zero following by a length of the run
+		// encode all zeros with a zero followed by the length of the run
 		if src[srcIdx] == 0x00 {
 			if runLen == 0 {
 				out = append(out, 0x00)
 			}
+			// count up all the zero valued bytes
 			runLen++
 		} else {
 			if runLen > 0 {
 				// encode run length using a variable length integer
 				out = binary.AppendUvarint(out, runLen)
+				// reset to do it again
 				runLen = 0
 			}
 			out = append(out, src[srcIdx]) // append non-zero literals
@@ -77,9 +98,8 @@ func (ZRLECodec) DecodeBlock(src []byte) ([]byte, error) {
 			// read the run length value and number of bytes
 			runLen, bytes = binary.Uvarint(src[srcIdx+1:])
 			// continually add zeros to meet run length
-			for range runLen {
-				out = append(out, 0x00)
-			}
+			// go defaults slice values to 0, so allocation is all that is required
+			out = out[:len(out)+int(runLen)]
 			srcIdx += bytes
 		} else {
 			// add the literal if not a zero
