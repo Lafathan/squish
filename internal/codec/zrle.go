@@ -6,22 +6,22 @@ import (
 )
 
 // ======================================================================================
-// ZRLE codec
-// This code works by taking strings of zeros in the data set and replacing them with
+// Zero Run Length Encoding
+// This codec works by taking strings of zeros in the data set and replacing them with
 // zero valued byte followed by an unsigned variable length integer representation of the
 // run length. All non-zero values are carried over to the output.
 //
 // examples:
-//	| Data                                           | Compressed
-//  | 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00 | 0x00, 0x05, 0x01, 0x00, 0x02
-//  | 0x00, 0x00, 0x01, 0x00, 0x02                   | 0x00, 0x02, 0x01, 0x00, 0x01, 0x02
-//  | 0x00 repeated 69420 times, 0x01                | 0x00, 0x44, 0x9E, 0x2C, 0x01
+//	| Data                                    | Compressed
+//  | 0x00 0x00 0x00 0x00 0x00 0x01 0x00 0x00 | 0x00 0x05 0x01 0x00 0x02
+//  | 0x00 0x00 0x01 0x00 0x02                | 0x00 0x02 0x01 0x00 0x01 0x02
+//  | 0x00 (repeated 69420 times) 0x01        | 0x00 0x44 0x9E 0x2C 0x01
 //
 // The variable length integer is defined in the binary package as the following:
-// - unsigned integers are serialized 7 bits at a time, starting with the
-//   least significant bits
-// - the most significant bit (msb) in each output byte indicates if there
-//   is a continuation byte (msb = 1)
+// - unsigned integers are serialized 7 bits at a time, starting with the least
+//   significant bits
+// - the most significant bit (msb) in each output byte indicates if there is a
+//   continuation byte (msb = 1)
 // ======================================================================================
 
 type ZRLECodec struct{}
