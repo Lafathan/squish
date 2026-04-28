@@ -5,6 +5,41 @@ import (
 	"squish/internal/sqerr"
 )
 
+// ======================================================================================
+// Run Length Encoding
+//
+// This codec works by taking strings the same, or similar values in the data set and
+// replacing them with a n-byte run-length tuples. The run length is represented with a
+// variable length integer.
+//
+// The option is available to make the compression lossy which adds additional processing
+// that intelligently determines when to consider a value the same as the previous value
+// within some dynamic tolerance.
+//
+// Every 8 byte-length chunks are preceded by a single byte whos bits represent whether
+// the next chunk is an n-byte run-length tuple, or just a set of raw bytes.
+//
+// examples:
+//	| Data                                    | Compressed - byte length = 1, lossless
+//  | 0 0 0 0 2 3 3 3 3 3 2 1 0 0 0 0 1 2 2 2 | 165 (10100101) 0 3 2 3 5 2 1 0 4 1 2 3
+//  | 0 (repeated 69420 times)  1 2 2 3 3 4 5 | 224 (11100000) 0 68 147 44 1 2 2 3 2 4 5
+//	| Data                                    | Compressed - byte length = 2, lossless
+//  | 0 0 0 0 0 0 1 2 1 2 3 2 3 2 3 2 1 1 1 1 | 240 (11110000) 0 0 3 1 2 2 3 2 3 1 1 2
+//  | 0 (repeated 69420 times)  1 2 2 3 3 4   | 128 (10000000) 0 0 130 143 22 1 2 2 3 3 4
+//	| Data                                    | Compressed - byte length = 3, lossless
+//  | 0 1 0 0 1 0 3 3 3 3 3 3 2 1 1 2 1 1     | 224 (11100000) 0 1 0 2 3 3 3 2 2 1 1 2
+//  | 0 (repeated 69420 times)  1 2 2 3 3     | 128 (10000000) 0 0 0 129 180 98 1 2 2 3 3
+//	| Data                                    | Compressed - byte length = 1, lossy
+//  | 0 0 0 0 0 0 1 0 0 0 0 0 2 0 0 0 1 3 0 0 | 128 (10000000) 0 20
+//  | 0 0 0 0 0 0 9 0 0 0 0 0 1 0 2 0 1 2 0 0 | 162 (10100010) 0 6 9 0 7 2 0 1 2 0 2
+//
+// The variable length integer is defined in the binary package as the following:
+// - unsigned integers are serialized 7 bits at a time, starting with the least
+//   significant bits
+// - the most significant bit (msb) in each output byte indicates if there is a
+//   continuation byte (msb = 1)
+// ======================================================================================
+
 const (
 	tolAlpha float32 = 0.15 // tolerance sigma decay
 	tolMin   float32 = 2.0  // residual that will always result in conforming to anchor
@@ -59,15 +94,16 @@ func (t *RLTolerance) updateTolerance(data []byte) {
 	for i := range len(t.tolerance) {
 		// grab some useful values
 		s, d := t.sigma[i], data[i]
-		// calculate the new tolerance based on a residuals
+		// calculate the new tolerance based on a residual
 		r = float32(absByteDiff(t.anchor[i], d))
-		t.sigma[i] = s - (s+r)*tolAlpha
+		t.sigma[i] = s - (s+r)*tolAlpha // s * (1 - tolAlpha) + r * tolAlpha
 		tol = tolMin + tolK*s
 		t.tolerance[i] = clampFloat(tol, tolMin, tolMax)
 		// track and update candidate for new anchor values
 		if r <= t.tolerance[i] {
 			// track repeats of valid candidates
-			if absByteDiff(t.candidate[i], d) <= tolBand {
+			c := t.candidate[i]
+			if absByteDiff(c, d) <= tolBand {
 				t.count[i]++
 			} else {
 				t.candidate[i] = d
@@ -75,7 +111,7 @@ func (t *RLTolerance) updateTolerance(data []byte) {
 			}
 			// choose a new anchor if candidate repeats enough
 			if t.count[i] >= int(tolHang) {
-				t.anchor[i] = t.candidate[i]
+				t.anchor[i] = c
 				t.count[i] = 0
 			}
 		} else {

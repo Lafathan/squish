@@ -132,7 +132,7 @@ func histogram[T byte | int32](data []T, freq []int32) {
 	}
 }
 
-// create cumulative sum
+// create cumulative sum in-place
 func cumSum(s []int32) {
 	var (
 		sum int32 = 0

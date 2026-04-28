@@ -13,9 +13,8 @@ import (
 //
 // examples:
 //	| Data                                    | Compressed
-//  | 0x00 0x00 0x00 0x00 0x00 0x01 0x00 0x00 | 0x00 0x05 0x01 0x00 0x02
-//  | 0x00 0x00 0x01 0x00 0x02                | 0x00 0x02 0x01 0x00 0x01 0x02
-//  | 0x00 (repeated 69420 times) 0x01        | 0x00 0x44 0x9E 0x2C 0x01
+//  | 0 0 0 0 0 1 2 2 3 3 3 0 0 0 0 1 2 2 3 3 | 0 5 1 2 2 3 3 3 0 4 1 2 2 3 2
+//  | 0 (repeated 69420 times)  1 2 2 3 3 4 5 | 0 68 147 44 1 2 2 3 2 4 5
 //
 // The variable length integer is defined in the binary package as the following:
 // - unsigned integers are serialized 7 bits at a time, starting with the least
