@@ -7,14 +7,13 @@ import (
 
 // ======================================================================================
 // Zero Run Length Encoding
-// This codec works by taking strings of zeros in the data set and replacing them with
-// zero valued byte followed by an unsigned variable length integer representation of the
-// run length. All non-zero values are carried over to the output.
 //
-// examples:
-//	| Data                                    | Compressed
-//  | 0 0 0 0 0 1 2 2 3 3 3 0 0 0 0 1 2 2 3 3 | 0 5 1 2 2 3 3 3 0 4 1 2 2 3 2
-//  | 0 (repeated 69420 times)  1 2 2 3 3 4 5 | 0 68 147 44 1 2 2 3 2 4 5
+// This codec works by taking runs of zeros and representing them with a zero valued byte
+// followed by an unsigned variable length integer representation of the run length.
+// All non-zero values are carried over to the output.
+//
+// ex: [0 0 0 0 0 1 2 2 3 3 3 0 0 0 0 1 2 2 3 3] -> [0 5 1 2 2 3 3 3 0 4 1 2 2 3 2]
+//     [0 (repeated 69420 times)  1 2 2 3 3 4 5] -> [0 68 147 44 1 2 2 3 2 4 5]
 //
 // The variable length integer is defined in the binary package as the following:
 // - unsigned integers are serialized 7 bits at a time, starting with the least
