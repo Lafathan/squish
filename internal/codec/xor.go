@@ -3,7 +3,7 @@ package codec
 // ======================================================================================
 // eXclusive OR Transform
 //
-// This codec is a transform and not a comression technique. This technique stores the
+// This codec is a transform and not a compression technique. This transform stores the
 // first byte from the data set, then the result of every subsequent byte XOR'd with the
 // previous. This can reduce entropy and improve compressability for certain data sets.
 //

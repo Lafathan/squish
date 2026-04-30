@@ -2,6 +2,34 @@ package codec
 
 type MTFCodec struct{}
 
+// ======================================================================================
+// Move To Front
+//
+// This codec is a transform and not a compression technique. This transform works by
+// replacing a value with the index of that value in an alphabet. After every replacement
+// the alphabet is updated by moving the matched element to the front. Frequently
+// repeated characters become small values.
+//
+// ex:  Input                                                Alphabet
+//     [ m  m  i  i  s  s  i  i  s  s  i  i  p  p  i  i]   - ijklmnopqrs
+//     [ 4                                             ]   - mijklnopqrs
+//     [ 4  0                                          ]   - mijklnopqrs
+//     [ 4  0  1                                       ]   - imjklnopqrs
+//     [ 4  0  1  0                                    ]   - imjklnopqrs
+//     [ 4  0  1  0 10                                 ]   - simjklnopqr
+//     [ 4  0  1  0 10  0                              ]   - simjklnopqr
+//     [ 4  0  1  0 10  0  1                           ]   - ismjklnopqr
+//     [ 4  0  1  0 10  0  1  0                        ]   - ismjklnopqr
+//     [ 4  0  1  0 10  0  1  0  1                     ]   - simjklnopqr
+//     [ 4  0  1  0 10  0  1  0  1  0                  ]   - simjklnopqr
+//     [ 4  0  1  0 10  0  1  0  1  0  1               ]   - ismjklnopqr
+//     [ 4  0  1  0 10  0  1  0  1  0  1  0            ]   - ismjklnopqr
+//     [ 4  0  1  0 10  0  1  0  1  0  1  0  8         ]   - pismjklnoqr
+//     [ 4  0  1  0 10  0  1  0  1  0  1  0  8  0      ]   - pismjklnoqr
+//     [ 4  0  1  0 10  0  1  0  1  0  1  0  8  0  1   ]   - ipsmjklnoqr
+//     [ 4  0  1  0 10  0  1  0  1  0  1  0  8  0  1  0]   - ipsmjklnoqr
+// ======================================================================================
+
 func makeAlphabet() [256]byte {
 	// create a symbol alphabet
 	var sym [256]byte
