@@ -230,7 +230,7 @@ func unmapID(data, sa, ids, bktT []int32, numLMS int) {
 	clear(sa)
 	end := len(ids) - 1
 	// cache recently used bucket
-	cachedChar := ids[end-numLMS+int(ids[0])]
+	cachedChar := int32(0)
 	cachedBucket := bktT[cachedChar]
 	// loop through the new sub-problem sa
 	for i := numLMS - 1; i >= 0; i-- {
