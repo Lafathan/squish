@@ -4,11 +4,32 @@ import (
 	"bytes"
 	"container/heap"
 	"errors"
-	"fmt"
 	"io"
 	"math/big"
 	"squish/internal/bitio"
+	"squish/internal/sqerr"
 )
+
+// ======================================================================================
+// Huffman Encoding
+//
+// This codec replaces bytes that occur more often with smaller bit representations.
+//
+// ex: [0 0 0 0 0 0 0 0 1 1 1 1 2 2 3 3]
+//                            __________________
+//                           |                  |
+//                           | 0000 0000 -> 0   |
+//     byte to bit mapping = | 0000 0001 -> 10  |
+//                           | 0000 0010 -> 110 |
+//                           | 0000 0011 -> 111 |
+//                           |__________________|
+//
+//     [0 0 0 0 0 0 0 0 1 1 1 1 2 2 3 3] -> [0000000010101010110110111111]
+//                                          [0000 0000 1010 1010 1101 1011 1111 0000]
+//                                          [        0       170       219       240]
+//
+//     [0 0 0 0 0 0 0 0 1 1 1 1 2 2 3 3] -> [0 170 219 240]
+// ======================================================================================
 
 const (
 	leaf   = 0
@@ -188,7 +209,7 @@ func deserializeHuffmanLengths(br io.Reader) (*[256]uint8, error) {
 	for {
 		// read in the length and the symbol
 		if _, err := io.ReadFull(br, lenSymbolPair); err != nil {
-			return &lengths, fmt.Errorf("error while reading huffman dictionary: %w", err)
+			return &lengths, sqerr.CodedError(err, sqerr.Corrupt, "Error while reading huffman dictionary")
 		}
 		// zero length marks the end of the dictionary
 		if lenSymbolPair[0] == 0x00 {
@@ -226,7 +247,7 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, error) {
 			bitsToWrite = min(remainingBits, 64)
 			tmpBig.Rsh(d[src[i]].bits, uint(remainingBits-bitsToWrite))
 			if err = bw.WriteBits(tmpBig.Uint64(), bitsToWrite); err != nil {
-				return []byte{}, fmt.Errorf("error while writing huffman encoded bits: %w", err)
+				return nil, sqerr.CodedError(err, sqerr.IO, "Error while writing huffman encoded bits")
 			}
 			remainingBits -= bitsToWrite
 		}
@@ -234,7 +255,7 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, error) {
 	// flush and pad ouput to be byte aligned, padded bits is prepended to dictionary
 	pad, err := bw.Flush()
 	if err != nil {
-		return []byte{}, fmt.Errorf("error while flushing bitwriter during huffman encoding: %w", err)
+		return nil, sqerr.CodedError(err, sqerr.IO, "Error while flushing bitwriter during huffman encoding")
 	}
 	out := append([]byte{byte(pad)}, outBuffer.Bytes()...)
 	return out, nil
@@ -249,12 +270,12 @@ func (HUFFMANCodec) DecodeBlock(src []byte) ([]byte, error) {
 	// get the padded bits
 	padBits, err := br.ReadByte()
 	if err != nil {
-		return []byte{}, fmt.Errorf("error while reading padded bits byte in huffman decoding: %w", err)
+		return nil, sqerr.CodedError(err, sqerr.IO, "error while reading padded bits byte in huffman decoding: %w")
 	}
 	// get the huffman code lengths
 	l, err := deserializeHuffmanLengths(br)
 	if err != nil {
-		return []byte{}, fmt.Errorf("error while deserializing huffman code dictionary: %w", err)
+		return nil, sqerr.CodedError(err, sqerr.Corrupt, "error while deserializing huffman code dictionary")
 	}
 	d := getHuffmanDictFromLengths(l)
 	t := getHuffmanTreeFromDict(d)
@@ -270,7 +291,7 @@ func (HUFFMANCodec) DecodeBlock(src []byte) ([]byte, error) {
 	if padBits > 0 {
 		padBuffer, err = inBuffer.ReadBits(int(padBits))
 		if err != nil {
-			return []byte{}, fmt.Errorf("error while reading first %d bits from source in huffman decoding: %w", padBits, err)
+			return nil, sqerr.CodedError(err, sqerr.IO, "error reading padding bits from source in huffman decoding")
 		}
 	}
 	node := t
@@ -299,7 +320,7 @@ func (HUFFMANCodec) DecodeBlock(src []byte) ([]byte, error) {
 	if errors.Is(err, io.EOF) {
 		return outBuffer, nil
 	} else {
-		return outBuffer, fmt.Errorf("error while reading bit from source in huffman decoding: %w", err)
+		return nil, sqerr.CodedError(err, sqerr.IO, "error reading bits from source in huffman decoding")
 	}
 }
 
