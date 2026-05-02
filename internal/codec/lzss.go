@@ -1,10 +1,5 @@
 package codec
 
-import (
-	"squish/internal/sqerr"
-	"sync"
-)
-
 // ======================================================================================
 // Lempel–Ziv–Storer–Szymanski (LZSS)
 //
@@ -26,6 +21,11 @@ import (
 //                                 |-> Flag Byte | Lookback & Match Length tuple |
 //                                 |-> 0000 0010
 // ======================================================================================
+
+import (
+	"squish/internal/sqerr"
+	"sync"
+)
 
 const (
 	maxLookBack        = 1<<12 - 1              // 4095 - how far back to look for matches

@@ -1,5 +1,16 @@
 package codec
 
+// ======================================================================================
+// Burrows Wheeler
+//
+// This codec is a transform and not a compression technique. This transform works by
+// using a sorted suffix array to group similar character together to reduce entropy
+// and increase compressability.
+//
+// ex:  Input                               output
+//     [a b c a a b b c c a b c a b c]   - [c a c c c a a a a b b b b c b]
+// ======================================================================================
+
 import (
 	"encoding/binary"
 	"squish/internal/sqerr"

@@ -1,7 +1,5 @@
 package codec
 
-type MTFCodec struct{}
-
 // ======================================================================================
 // Move To Front
 //
@@ -10,25 +8,27 @@ type MTFCodec struct{}
 // the alphabet is updated by moving the matched element to the front. Frequently
 // repeated characters become small values.
 //
-// ex:  Input                                                Alphabet
-//     [ m  m  i  i  s  s  i  i  s  s  i  i  p  p  i  i]   - ijklmnopqrs
-//     [ 4                                             ]   - mijklnopqrs
-//     [ 4  0                                          ]   - mijklnopqrs
-//     [ 4  0  1                                       ]   - imjklnopqrs
-//     [ 4  0  1  0                                    ]   - imjklnopqrs
-//     [ 4  0  1  0 10                                 ]   - simjklnopqr
-//     [ 4  0  1  0 10  0                              ]   - simjklnopqr
-//     [ 4  0  1  0 10  0  1                           ]   - ismjklnopqr
-//     [ 4  0  1  0 10  0  1  0                        ]   - ismjklnopqr
-//     [ 4  0  1  0 10  0  1  0  1                     ]   - simjklnopqr
-//     [ 4  0  1  0 10  0  1  0  1  0                  ]   - simjklnopqr
-//     [ 4  0  1  0 10  0  1  0  1  0  1               ]   - ismjklnopqr
-//     [ 4  0  1  0 10  0  1  0  1  0  1  0            ]   - ismjklnopqr
-//     [ 4  0  1  0 10  0  1  0  1  0  1  0  8         ]   - pismjklnoqr
-//     [ 4  0  1  0 10  0  1  0  1  0  1  0  8  0      ]   - pismjklnoqr
-//     [ 4  0  1  0 10  0  1  0  1  0  1  0  8  0  1   ]   - ipsmjklnoqr
-//     [ 4  0  1  0 10  0  1  0  1  0  1  0  8  0  1  0]   - ipsmjklnoqr
+// ex:  Input                                              Alphabet
+//     [ m  m  i  i  s  s  i  i  s  s  i  i  p  p  i  i] - ijklmnopqrs
+//     [ 4                                             ] - mijklnopqrs
+//     [ 4  0                                          ] - mijklnopqrs
+//     [ 4  0  1                                       ] - imjklnopqrs
+//     [ 4  0  1  0                                    ] - imjklnopqrs
+//     [ 4  0  1  0 10                                 ] - simjklnopqr
+//     [ 4  0  1  0 10  0                              ] - simjklnopqr
+//     [ 4  0  1  0 10  0  1                           ] - ismjklnopqr
+//     [ 4  0  1  0 10  0  1  0                        ] - ismjklnopqr
+//     [ 4  0  1  0 10  0  1  0  1                     ] - simjklnopqr
+//     [ 4  0  1  0 10  0  1  0  1  0                  ] - simjklnopqr
+//     [ 4  0  1  0 10  0  1  0  1  0  1               ] - ismjklnopqr
+//     [ 4  0  1  0 10  0  1  0  1  0  1  0            ] - ismjklnopqr
+//     [ 4  0  1  0 10  0  1  0  1  0  1  0  8         ] - pismjklnoqr
+//     [ 4  0  1  0 10  0  1  0  1  0  1  0  8  0      ] - pismjklnoqr
+//     [ 4  0  1  0 10  0  1  0  1  0  1  0  8  0  1   ] - ipsmjklnoqr
+//     [ 4  0  1  0 10  0  1  0  1  0  1  0  8  0  1  0] - ipsmjklnoqr
 // ======================================================================================
+
+type MTFCodec struct{}
 
 func makeAlphabet() [256]byte {
 	// create a symbol alphabet

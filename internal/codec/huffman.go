@@ -1,15 +1,5 @@
 package codec
 
-import (
-	"bytes"
-	"container/heap"
-	"errors"
-	"io"
-	"math/big"
-	"squish/internal/bitio"
-	"squish/internal/sqerr"
-)
-
 // ======================================================================================
 // Huffman Encoding
 //
@@ -30,6 +20,16 @@ import (
 //
 //     [0 0 0 0 0 0 0 0 1 1 1 1 2 2 3 3] -> [0 170 219 240]
 // ======================================================================================
+
+import (
+	"bytes"
+	"container/heap"
+	"errors"
+	"io"
+	"math/big"
+	"squish/internal/bitio"
+	"squish/internal/sqerr"
+)
 
 const (
 	leaf   = 0

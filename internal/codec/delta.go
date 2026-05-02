@@ -1,7 +1,5 @@
 package codec
 
-type DELTACodec struct{}
-
 // ======================================================================================
 // Delta Transform
 //
@@ -11,6 +9,8 @@ type DELTACodec struct{}
 //
 // ex: [42 42 42 42 42 43 43 43 43 42 42 42 42] -> [42 0 0 0 0 0 1 0 0 0 129 0 0 0]
 // ======================================================================================
+
+type DELTACodec struct{}
 
 func (DELTACodec) EncodeBlock(src []byte) ([]byte, error) {
 	// encode source using a delta encoding

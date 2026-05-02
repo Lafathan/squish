@@ -1,10 +1,5 @@
 package codec
 
-import (
-	"encoding/binary"
-	"squish/internal/sqerr"
-)
-
 // ======================================================================================
 // Zero Run Length Encoding
 //
@@ -21,6 +16,11 @@ import (
 // - the most significant bit (msb) in each output byte indicates if there is a
 //   continuation byte (msb = 1)
 // ======================================================================================
+
+import (
+	"encoding/binary"
+	"squish/internal/sqerr"
+)
 
 type ZRLECodec struct{}
 
