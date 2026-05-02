@@ -26,7 +26,6 @@ import (
 	"container/heap"
 	"errors"
 	"io"
-	"math/big"
 	"squish/internal/bitio"
 	"squish/internal/sqerr"
 )
@@ -46,8 +45,8 @@ type node struct {
 }
 
 type hCode struct {
-	bits   *big.Int // byte array to store bits of huffman code
-	length int      // valid number of bits in byte array
+	bits   uint64 // bytes to store bits of huffman code
+	length int    // valid number of bits in byte array
 }
 
 type huffmanHeap []*node
@@ -122,15 +121,15 @@ func getHuffmanLengthsFromTree(tree *node) *[256]uint8 {
 func getHuffmanTreeFromDict(d *[256]hCode) *node {
 	// build a huffman tree from a map of byte values to huffman codes
 	var (
-		root      = node{nodeType: branch}                           // make an empty root node
-		buildTree func(n *node, val byte, bits *big.Int, bitPos int) // define recursive elements
-		bit       uint
+		root      = node{nodeType: branch}                         // make an empty root node
+		buildTree func(n *node, val byte, bits uint64, bitPos int) // define recursive elements
+		bit       uint64
 	)
 	// recursively build out the tree as you iterate through given codes
-	buildTree = func(n *node, val byte, bits *big.Int, bitPos int) {
+	buildTree = func(n *node, val byte, bits uint64, bitPos int) {
 		if bitPos >= 0 {
 			// if you are not at the end of your bit stream
-			bit = bits.Bit(bitPos)
+			bit = (bits >> bitPos) & 0x01
 			if n.children[bit] == nil {
 				// create children nodes when needed
 				n.children[bit] = &node{nodeType: branch}
@@ -155,13 +154,12 @@ func getHuffmanTreeFromDict(d *[256]hCode) *node {
 func getHuffmanDictFromLengths(l *[256]uint8) *[256]hCode {
 	// build the canonical huffman codes from the code lengths
 	var (
-		d           = [256]hCode{}  // the dictionary to store the data in
-		codeLengths = [256]int{}    // a code length histogram for skipping unnecessary loops
-		curBits     = big.NewInt(0) // new big.Int to store bit streams
-		one         = big.NewInt(1) // big.Int value of one for big.Int incrementing
+		d           = [256]hCode{} // the dictionary to store the data in
+		codeLengths = [256]int32{} // a code length histogram for skipping unnecessary loops
+		curBits     = uint64(0)    // new big.Int to store bit streams
 	)
-	for i := range len(l) {
-		codeLengths[l[i]]++
+	for _, v := range l {
+		codeLengths[v]++
 	}
 	for bitLen := 1; bitLen < 256; bitLen++ {
 		// loop through all possible bit stream lengths
@@ -170,14 +168,14 @@ func getHuffmanDictFromLengths(l *[256]uint8) *[256]hCode {
 			for i := range len(l) {
 				if l[i] == uint8(bitLen) {
 					// build the canonical code for code of matching length
-					d[i] = hCode{bits: big.NewInt(0).Set(curBits), length: bitLen}
+					d[i] = hCode{bits: curBits, length: bitLen}
 					// add 1 to get the next canonical code
-					curBits.Add(curBits, one)
+					curBits++
 				}
 			}
 		}
 		// left shift to get the codes of the next size up
-		curBits.Lsh(curBits, 1)
+		curBits <<= 1
 	}
 	return &d
 }
@@ -186,10 +184,10 @@ func serializeHuffmanLengths(l *[256]uint8) []byte {
 	// serializes canonical Huffman codes by storing only the bit length and symbol
 	out := []byte{}
 	for bitLen := 1; bitLen < 256; bitLen++ {
-		for i := range len(l) {
-			if l[i] == uint8(bitLen) {
+		for i, v := range l {
+			if v == uint8(bitLen) {
 				// append the bit length and then the symbol
-				out = append(out, byte(l[i]))
+				out = append(out, byte(v))
 				out = append(out, byte(i))
 			}
 		}
@@ -229,7 +227,7 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, error) {
 	var (
 		outBuffer     = new(bytes.Buffer)             // create a new buffer to write to
 		bw            = bitio.NewBitWriter(outBuffer) // make a new bitwriter
-		tmpBig        = big.NewInt(0)                 // big.Int for nibble of bit.Int
+		curNib        = uint64(0)                     // current nibble of bits to be written
 		remainingBits int                             // remaining bites to be written
 		bitsToWrite   int                             // number of bits to write per pass per symbol
 		f             = make([]int32, 256)
@@ -240,13 +238,14 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, error) {
 	d := getHuffmanDictFromLengths(l)
 	_, err := outBuffer.Write(serializeHuffmanLengths(l))
 	for i := range len(src) {
+		curCode := d[src[i]]
 		// iteratively write huffman code bits per symbol
 		// iterating only really occurs for long symbol lengths (writes 64 bits at a time)
-		remainingBits = d[src[i]].length
+		remainingBits = curCode.length
 		for remainingBits > 0 {
 			bitsToWrite = min(remainingBits, 64)
-			tmpBig.Rsh(d[src[i]].bits, uint(remainingBits-bitsToWrite))
-			if err = bw.WriteBits(tmpBig.Uint64(), bitsToWrite); err != nil {
+			curNib = curCode.bits >> (remainingBits - bitsToWrite)
+			if err = bw.WriteBits(curNib, bitsToWrite); err != nil {
 				return nil, sqerr.CodedError(err, sqerr.IO, "Error while writing huffman encoded bits")
 			}
 			remainingBits -= bitsToWrite
