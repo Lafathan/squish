@@ -22,8 +22,8 @@ func (br *bitReader) ReadBits(nbits int) (uint64, error) {
 	// extra bits read in when reading bytes are saved in a buffer and prepended to the next request of bits.
 	if br.nBits < nbits {
 		// if you don't have enough bits in the buffer, determine how many more bytes you need and read them into the buffer
-		br.sBytesToRead = (int(nbits) - int(br.nBits) + 7) / 8
-		if int(br.nBits)+br.sBytesToRead*8 > 64 {
+		br.sBytesToRead = (nbits - br.nBits + 7) / 8
+		if br.nBits+br.sBytesToRead*8 > 64 {
 			return 0, fmt.Errorf("bitreader error when reading %d bytes: %w", br.sBytesToRead, io.ErrShortBuffer)
 		}
 		_, err := io.ReadFull(br.reader, br.sReadBuffer[:br.sBytesToRead])
