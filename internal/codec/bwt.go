@@ -37,13 +37,33 @@ var bwtPool = sync.Pool{
 	},
 }
 
-func sais(data, sa, freq, lengths, bktH, bktT []int32, dataMax int) {
+func buildSAIS(data []byte) []int32 {
+	// instantiate the workspace
+	ws := bwtPool.Get().(*bwtWorkspace)
+	defer bwtPool.Put(ws)
+	ws.src = grow32(ws.src, 2*len(data))
+	ws.sa = grow32(ws.sa, 2*len(data))
+	s := max(256, len(data))
+	ws.freq = grow32(ws.freq, s)
+	ws.lengths = grow32(ws.lengths, 6*s)
+	ws.bktH = grow32(ws.bktH, s)
+	ws.bktT = grow32(ws.bktT, s)
+	// double the input to create a cyclic sa
+	for i := range len(data) {
+		v := int32(data[i])
+		ws.src[i] = v
+		ws.src[i+len(data)] = v
+	}
+	return sais(ws.src, ws.sa, ws.freq, ws.lengths, ws.bktH, ws.bktT, 256)
+}
+
+func sais(data, sa, freq, lengths, bktH, bktT []int32, dataMax int) []int32 {
 	if len(data) == 0 {
-		return
+		return data
 	}
 	if len(data) == 1 {
 		sa[0] = 0
-		return
+		return data
 	}
 	// split the lengths array into half for this round and half for recursion
 	lengths, recurLengths := lengths[:len(lengths)/2], lengths[len(lengths)/2:]
@@ -72,6 +92,8 @@ func sais(data, sa, freq, lengths, bktH, bktT []int32, dataMax int) {
 	// perform induction sort
 	induceLeft(data, sa, bktH)
 	induceRight(data, sa, bktT)
+	// return the suffix array
+	return sa
 }
 
 func getBuckets(data, freq, bktH, bktT []int32, dataMax int) {
@@ -271,27 +293,11 @@ func (BWTCodec) EncodeBlock(src []byte) ([]byte, error) {
 		out            = make([]byte, length, length+4) // output
 		primary uint32 = 0                              // row of unrotated data in sorted suffix array
 	)
-	// instantiate the workspace
-	ws := bwtPool.Get().(*bwtWorkspace)
-	defer bwtPool.Put(ws)
-	ws.src = grow32(ws.src, int(2*length))
-	ws.sa = grow32(ws.sa, int(2*length))
-	s := max(256, int(length))
-	ws.freq = grow32(ws.freq, s)
-	ws.lengths = grow32(ws.lengths, 6*s)
-	ws.bktH = grow32(ws.bktH, s)
-	ws.bktT = grow32(ws.bktT, s)
-	// double the input to create a cyclic sa
-	for i := range len(src) {
-		v := int32(src[i])
-		ws.src[i] = v
-		ws.src[i+len(src)] = v
-	}
 	// build the suffix array using induced sorting
-	sais(ws.src, ws.sa, ws.freq, ws.lengths, ws.bktH, ws.bktT, 256)
+	sa := buildSAIS(src)
 	// extract valid rotations
 	k := int32(0)
-	for _, p := range ws.sa {
+	for _, p := range sa {
 		if p >= length {
 			continue
 		}
