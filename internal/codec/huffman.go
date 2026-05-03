@@ -294,27 +294,41 @@ func (HUFFMANCodec) DecodeBlock(src []byte) ([]byte, error) {
 		}
 	}
 	node := t
-	for {
-		// read in bit by bit, traversing the tree
-		if node.nodeType == branch {
-			newBit, err = inBuffer.ReadBits(1)
-			if err != nil {
-				break
-			}
-			if padBits > 0 {
+	if padBits > 0 {
+		for {
+			// read in bit by bit, traversing the tree
+			if node.nodeType == branch {
+				newBit, err = inBuffer.ReadBits(1)
+				if err != nil {
+					break
+				}
 				// use the msb of the padded buffer as the decision bit
 				node = node.children[(padBuffer>>(padBits-1))&0x01]
 				// update the padBuffer with new bits
 				padBuffer = (padBuffer << 1) | newBit
 			} else {
+				// append the decoded byte when you get to a leaf and reset to the root node
+				outBuffer = append(outBuffer, node.value)
+				node = t
+			}
+		}
+	} else {
+		for {
+			// read in bit by bit, traversing the tree
+			if node.nodeType == branch {
+				newBit, err = inBuffer.ReadBits(1)
+				if err != nil {
+					break
+				}
 				// use the new bit as the decision bit if there is no padding.
 				node = node.children[newBit]
+			} else {
+				// append the decoded byte when you get to a leaf and reset to the root node
+				outBuffer = append(outBuffer, node.value)
+				node = t
 			}
-		} else {
-			// append the decoded byte when you get to a leaf and reset to the root node
-			outBuffer = append(outBuffer, node.value)
-			node = t
 		}
+
 	}
 	if errors.Is(err, io.EOF) {
 		return outBuffer, nil

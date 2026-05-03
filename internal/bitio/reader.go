@@ -9,12 +9,12 @@ type bitReader struct {
 	reader       io.Reader // io.reader for reading a stream
 	buffer       uint64    // buffer holding current streamed bits
 	nBits        int       // number of bits currently in the buffer (cursor)
-	sReadBuffer  [8]byte   // scratch
+	sReadBuffer  []byte    // scratch
 	sBytesToRead int       // scratch
 }
 
 func NewBitReader(r io.Reader) *bitReader {
-	return &bitReader{reader: r}
+	return &bitReader{reader: r, sReadBuffer: make([]byte, 8)}
 }
 
 func (br *bitReader) ReadBits(nbits int) (uint64, error) {
