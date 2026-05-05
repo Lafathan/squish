@@ -30,6 +30,7 @@ var datasets = []struct {
 	{"zeros", makeZeros},
 	{"repeating", makeRepeating},
 	{"ramp", makeRamp},
+	{"fibonacci", makeFibonacci},
 }
 
 func makeRandom(n int) []byte {
@@ -57,6 +58,30 @@ func makeRamp(n int) []byte {
 	out := make([]byte, n)
 	for i := range n {
 		out[i] = byte(i)
+	}
+	return out
+}
+
+func makeFibonacci(n int) []byte {
+	out := make([]byte, n)
+	if n < 3 {
+		return out
+	}
+	idx := 2
+	fib1, fib2 := 1, 1
+	out[0] = 0
+	out[1] = 1
+	val := byte(2)
+	for idx < n {
+		fib1, fib2 = fib2, fib1+fib2
+		for range fib2 {
+			out[idx] = val
+			idx++
+			if idx >= n {
+				break
+			}
+		}
+		val++
 	}
 	return out
 }
@@ -97,7 +122,7 @@ func TestCodecs(t *testing.T) {
 						t.Fatalf("Codec %s is lossy, but reported lossless or vice versa", codecName)
 					}
 					if c.IsLossless() && string(input) != string(decoded) {
-						t.Fatalf("Codec %s failed to reproduce input in roundtrip", codecName)
+						t.Fatalf("Codec %s failed to reproduce input in roundtrip (%s, %v)", codecName, ds.name, n)
 					}
 				}
 			}
