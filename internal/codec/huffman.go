@@ -99,13 +99,14 @@ func getHuffmanLengthsFromTree(tree *node) *[256]uint8 {
 		lengths = [256]uint8{} // store the bit lengths for each symbol at the index of that symbol
 		getCode func(n *node, l uint8)
 	)
+	// special case of single symbol tree
+	if tree.nodeType == leaf {
+		lengths[tree.value] = 1
+		return &lengths
+	}
 	// recursive depth-first search for determining code lengths
 	getCode = func(n *node, l uint8) {
 		if n.nodeType == leaf {
-			if l == 0 {
-				// protection from single symbol tree
-				l = 1
-			}
 			// update the list of lengths when you arrive at a leaf
 			lengths[n.value] = l
 		} else {
@@ -144,8 +145,9 @@ func getHuffmanTreeFromDict(d *[256]hCode) *node {
 	}
 	// build the tree using each given code
 	for i := range len(d) {
-		if d[i].length > 0 {
-			buildTree(&root, byte(i), d[i].bits, d[i].length-1)
+		code := d[i]
+		if code.length > 0 {
+			buildTree(&root, byte(i), code.bits, code.length-1)
 		}
 	}
 	return &root
@@ -295,6 +297,7 @@ func (HUFFMANCodec) DecodeBlock(src []byte) ([]byte, error) {
 	}
 	node := t
 	if padBits > 0 {
+		padBits-- // reduce padBits by one to use it as an offset to grab the msb of padBuffer
 		for {
 			// read in bit by bit, traversing the tree
 			if node.nodeType == branch {
@@ -303,7 +306,7 @@ func (HUFFMANCodec) DecodeBlock(src []byte) ([]byte, error) {
 					break
 				}
 				// use the msb of the padded buffer as the decision bit
-				node = node.children[(padBuffer>>(padBits-1))&0x01]
+				node = node.children[(padBuffer>>padBits)&0x01]
 				// update the padBuffer with new bits
 				padBuffer = (padBuffer << 1) | newBit
 			} else {
