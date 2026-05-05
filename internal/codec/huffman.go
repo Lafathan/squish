@@ -45,7 +45,7 @@ type node struct {
 }
 
 type hCode struct {
-	bits   uint16 // bytes to store bits of huffman code
+	bits   uint32 // bytes to store bits of huffman code
 	length int    // valid number of bits in byte array
 }
 
@@ -122,11 +122,11 @@ func getHuffmanTreeFromDict(d *[256]hCode) *node {
 	// build a huffman tree from a map of byte values to huffman codes
 	var (
 		root      = node{nodeType: branch}                         // make an empty root node
-		buildTree func(n *node, val byte, bits uint16, bitPos int) // define recursive elements
-		bit       uint16
+		buildTree func(n *node, val byte, bits uint32, bitPos int) // define recursive elements
+		bit       uint32
 	)
 	// recursively build out the tree as you iterate through given codes
-	buildTree = func(n *node, val byte, bits uint16, bitPos int) {
+	buildTree = func(n *node, val byte, bits uint32, bitPos int) {
 		if bitPos >= 0 {
 			// if you are not at the end of your bit stream
 			bit = (bits >> bitPos) & 0x01
@@ -156,7 +156,7 @@ func getHuffmanDictFromLengths(l *[256]uint8) *[256]hCode {
 	var (
 		d           = [256]hCode{} // the dictionary to store the data in
 		codeLengths = [256]int32{} // a code length histogram for skipping unnecessary loops
-		curBits     = uint16(0)    // new big.Int to store bit streams
+		curBits     = uint32(0)    // new big.Int to store bit streams
 	)
 	for _, v := range l {
 		codeLengths[v]++
@@ -227,7 +227,7 @@ func (HUFFMANCodec) EncodeBlock(src []byte) ([]byte, error) {
 	var (
 		outBuffer     = new(bytes.Buffer)             // create a new buffer to write to
 		bw            = bitio.NewBitWriter(outBuffer) // make a new bitwriter
-		curNib        = uint16(0)                     // current nibble of bits to be written
+		curNib        = uint32(0)                     // current nibble of bits to be written
 		remainingBits int                             // remaining bites to be written
 		bitsToWrite   int                             // number of bits to write per pass per symbol
 		f             = make([]int32, 256)
