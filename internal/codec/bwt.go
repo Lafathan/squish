@@ -24,8 +24,7 @@ type bwtWorkspace struct {
 	sa      []int32 // suffix array indexes to be sorted
 	freq    []int32 // data frequency (histogram)
 	lengths []int32 // lengths and IDs
-	bktH    []int32 // bucket min indexes
-	bktT    []int32 // bucket max indexes
+	bkt     []int32 // bucket indexes (reused for heads and tails)
 	pos     []int32 // scratch count sort slice for byte values
 	next    []int32 // last-first mapping for decoding
 }
@@ -46,18 +45,17 @@ func buildSAIS(data []byte) []int32 {
 	s := max(256, len(data))
 	ws.freq = grow32(ws.freq, s)
 	ws.lengths = grow32(ws.lengths, 6*s)
-	ws.bktH = grow32(ws.bktH, s)
-	ws.bktT = grow32(ws.bktT, s)
+	ws.bkt = grow32(ws.bkt, s)
 	// double the input to create a cyclic sa
 	for i := range len(data) {
 		v := int32(data[i])
 		ws.src[i] = v
 		ws.src[i+len(data)] = v
 	}
-	return sais(ws.src, ws.sa, ws.freq, ws.lengths, ws.bktH, ws.bktT, 256)
+	return sais(ws.src, ws.sa, ws.freq, ws.lengths, ws.bkt, 256)
 }
 
-func sais(data, sa, freq, lengths, bktH, bktT []int32, dataMax int) []int32 {
+func sais(data, sa, freq, lengths, bkt []int32, dataMax int) []int32 {
 	if len(data) == 0 {
 		return data
 	}
@@ -68,45 +66,56 @@ func sais(data, sa, freq, lengths, bktH, bktT []int32, dataMax int) []int32 {
 	// split the lengths array into half for this round and half for recursion
 	lengths, recurLengths := lengths[:len(lengths)/2], lengths[len(lengths)/2:]
 	// data value frequency and bucket-sort offsets
-	getBuckets(data, freq, bktH, bktT, dataMax)
-	numLMS := placeLMS(data, sa, bktT, lengths)
-	// reset buckets for induction sort
-	getBuckets(data, freq, bktH, bktT, dataMax)
+	getBucketTails(data, freq, bkt, dataMax)
+	// place the LMS substrings indexes
+	numLMS := placeLMS(data, sa, bkt, lengths)
 	if numLMS > 1 {
 		// perform induction sort
-		induceLeft(data, sa, bktH)
-		induceRight(data, sa, bktT)
+		getBucketHeads(data, freq, bkt, dataMax)
+		induceLeft(data, sa, bkt)
+		getBucketTails(data, freq, bkt, dataMax)
+		induceRight(data, sa, bkt)
 		// create sub-problem ids
 		maxID := createIDs(data, sa, lengths)
 		// map them to create the sub-problem
 		mapID(sa, lengths)
 		// generate sa for sub-problem
-		sais(sa[:numLMS], sa[len(sa)-numLMS:], freq, recurLengths, bktH, bktT, maxID)
+		sais(sa[:numLMS], sa[len(sa)-numLMS:], freq, recurLengths, bkt, maxID)
 		// reset buckets for placing the newly sorted LMS substring suffixes
-		getBuckets(data, freq, bktH, bktT, dataMax)
+		getBucketTails(data, freq, bkt, dataMax)
 		// unmap ids to LMS substring idexes
-		unmapID(data, sa, lengths, bktT, numLMS)
+		unmapID(data, sa, lengths, bkt, numLMS)
 	}
-	// reset buckets for induction again
-	getBuckets(data, freq, bktH, bktT, dataMax)
 	// perform induction sort
-	induceLeft(data, sa, bktH)
-	induceRight(data, sa, bktT)
+	getBucketHeads(data, freq, bkt, dataMax)
+	induceLeft(data, sa, bkt)
+	getBucketTails(data, freq, bkt, dataMax)
+	induceRight(data, sa, bkt)
 	// return the suffix array
 	return sa
 }
 
-func getBuckets(data, freq, bktH, bktT []int32, dataMax int) {
+func getBucketHeads(data, freq, bkt []int32, dataMax int) {
 	if len(freq) < dataMax {
 		freq = grow32(freq, dataMax)
 	}
 	histogram(data, freq)
 	total := int32(0)
-	// for i, n := range freq {
 	for i := range dataMax {
-		bktH[i] = total
+		bkt[i] = total
 		total += freq[i]
-		bktT[i] = total
+	}
+}
+
+func getBucketTails(data, freq, bkt []int32, dataMax int) {
+	if len(freq) < dataMax {
+		freq = grow32(freq, dataMax)
+	}
+	histogram(data, freq)
+	total := int32(0)
+	for i := range dataMax {
+		total += freq[i]
+		bkt[i] = total
 	}
 }
 
@@ -183,6 +192,7 @@ func induceLeft(data, sa, bktH []int32) {
 	// cache the recently used bucket
 	cachedChar := data[k]
 	cachedBucket := bktH[cachedChar]
+	// place tail of data in SA
 	sa[cachedBucket] = int32(k)
 	cachedBucket++
 	// loop through the sa placing l-type indexes
@@ -193,11 +203,9 @@ func induceLeft(data, sa, bktH []int32) {
 		}
 		k := j - 1
 		currentChar := data[k]
-		if k >= 0 {
-			if currentChar < data[j] {
-				// skip s-type indexes
-				continue
-			}
+		if currentChar < data[j] {
+			// skip s-type indexes
+			continue
 		}
 		// cache the new bucket
 		if currentChar != cachedChar {
@@ -224,11 +232,9 @@ func induceRight(data, sa, bktT []int32) {
 		}
 		k := j - 1
 		currentChar := data[k]
-		if k >= 0 {
-			if currentChar > data[j] {
-				// skip l-type indexes
-				continue
-			}
+		if currentChar > data[j] {
+			// skip l-type indexes
+			continue
 		}
 		// cache the new bucket
 		if currentChar != cachedChar {
@@ -343,9 +349,7 @@ func (BWTCodec) DecodeBlock(src []byte) ([]byte, error) {
 	// build the count array (cumulative sum)
 	histogram(src, ws.pos)
 	cumSum(ws.pos)
-	var (
-		out = make([]byte, length) // make an output slice
-	)
+	out := make([]byte, length) // make an output slice
 	// build stable count mapping for last column to first column
 	for i := range length {
 		b := src[i]
