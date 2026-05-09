@@ -95,37 +95,46 @@ func equalSliceWithinTolerance(slice1 []byte, slice2 []byte, tol []float32) bool
 }
 
 func (t *RLTolerance) updateTolerance(data []byte) {
+	if len(data) > len(t.sigma) {
+		// too many bytes, not enough tolerances
+		return
+	}
+	anchor := t.anchor
+	sigma := t.sigma
+	tolerance := t.tolerance
+	candidate := t.candidate
+	count := t.count
 	// update tolerances based on new data point
-	for i := range len(t.tolerance) {
+	for i, d := range data {
 		// grab some useful values
-		s, d := t.sigma[i], data[i]
+		s := sigma[i]
 		// calculate a residual
-		r := float32(absByteDiff(t.anchor[i], d))
+		r := float32(absByteDiff(anchor[i], d))
 		// calculate the new tolerance
 		s += (r - s) * tolAlpha // s * (1 - tolAlpha) + r * tolAlpha
-		t.sigma[i] = s
-		t.tolerance[i] = clampFloat(tolMin+tolK*s, tolMin, tolMax)
+		sigma[i] = s
+		tolerance[i] = clampFloat(tolMin+tolK*s, tolMin, tolMax)
 		// track and update candidate for new anchor values
-		if r <= t.tolerance[i] {
+		if r <= tolerance[i] {
 			// track repeats of valid candidates
-			if absByteDiff(t.candidate[i], d) <= tolBand {
-				t.count[i]++
+			if absByteDiff(candidate[i], d) <= tolBand {
+				count[i]++
 			} else {
-				t.candidate[i] = d
-				t.count[i] = 1
+				candidate[i] = d
+				count[i] = 1
 			}
 			// choose a new anchor if candidate repeats enough
-			if t.count[i] >= int(tolHang) {
-				t.anchor[i] = t.candidate[i]
-				t.count[i] = 0
+			if count[i] >= int(tolHang) {
+				anchor[i] = candidate[i]
+				count[i] = 0
 			}
 		} else {
 			// pick a new anchor if residual is way outside of the window
-			t.anchor[i] = d
-			t.sigma[i] = 0
-			t.candidate[i] = d
-			t.count[i] = 0
-			t.tolerance[i] = tolMin
+			anchor[i] = d
+			sigma[i] = 0
+			candidate[i] = d
+			count[i] = 0
+			tolerance[i] = tolMin
 		}
 	}
 }

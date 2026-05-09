@@ -146,7 +146,7 @@ func cumSum(s []int32) {
 }
 
 // grow a slice
-func grow32[T int32 | uint32](slice []T, length int) []T {
+func grow[T int32 | uint32 | byte](slice []T, length int) []T {
 	if cap(slice) < length {
 		return make([]T, length)
 	}

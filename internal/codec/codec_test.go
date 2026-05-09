@@ -107,7 +107,6 @@ func TestCodecs(t *testing.T) {
 					if string(input) != string(decoded) {
 						t.Fatalf("AUTO encoding mismatch: got %s - expected %s", decoded, input)
 					}
-
 				} else {
 					encoded, err := c.EncodeBlock(input)
 					if err != nil {

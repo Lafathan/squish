@@ -40,12 +40,12 @@ func buildSAIS(data []byte) []int32 {
 	// instantiate the workspace
 	ws := bwtPool.Get().(*bwtWorkspace)
 	defer bwtPool.Put(ws)
-	ws.src = grow32(ws.src, 2*len(data))
-	ws.sa = grow32(ws.sa, 2*len(data))
+	ws.src = grow(ws.src, 2*len(data))
+	ws.sa = grow(ws.sa, 2*len(data))
 	s := max(256, len(data))
-	ws.freq = grow32(ws.freq, s)
-	ws.lengths = grow32(ws.lengths, 6*s)
-	ws.bkt = grow32(ws.bkt, s)
+	ws.freq = grow(ws.freq, s)
+	ws.lengths = grow(ws.lengths, 6*s)
+	ws.bkt = grow(ws.bkt, s)
 	// double the input to create a cyclic sa
 	for i := range len(data) {
 		v := int32(data[i])
@@ -97,7 +97,7 @@ func sais(data, sa, freq, lengths, bkt []int32, dataMax int) []int32 {
 
 func getBucketHeads(data, freq, bkt []int32, dataMax int) {
 	if len(freq) < dataMax {
-		freq = grow32(freq, dataMax)
+		freq = grow(freq, dataMax)
 	}
 	histogram(data, freq)
 	total := int32(0)
@@ -109,7 +109,7 @@ func getBucketHeads(data, freq, bkt []int32, dataMax int) {
 
 func getBucketTails(data, freq, bkt []int32, dataMax int) {
 	if len(freq) < dataMax {
-		freq = grow32(freq, dataMax)
+		freq = grow(freq, dataMax)
 	}
 	histogram(data, freq)
 	total := int32(0)
@@ -333,8 +333,8 @@ func (BWTCodec) DecodeBlock(src []byte) ([]byte, error) {
 	// instantiate the workspace
 	ws := bwtPool.Get().(*bwtWorkspace)
 	defer bwtPool.Put(ws)
-	ws.next = grow32(ws.next, len(src)) // last column to first column mapping array
-	ws.pos = grow32(ws.pos, 256)        // count sort slice
+	ws.next = grow(ws.next, len(src)) // last column to first column mapping array
+	ws.pos = grow(ws.pos, 256)        // count sort slice
 	// check for primary value
 	if len(src) < 4 {
 		return []byte{}, sqerr.New(sqerr.Corrupt, "BWT is missing primary value")

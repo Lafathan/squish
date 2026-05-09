@@ -31,7 +31,7 @@ const (
 	maxLookBack        = 1<<12 - 1              // 4095 - how far back to look for matches
 	minMatchLen  int32 = 3                      // min match length
 	maxMatchLen        = 1<<4 - 1 + minMatchLen // 18 - how far forward you can match (including min match)
-	maxMatchIter       = 32                     // number of hash matches to look back through before halting
+	maxMatchIter       = 20                     // number of hash matches to look back through before halting
 	hashSize           = 1 << 16                // possible hash matches
 )
 
