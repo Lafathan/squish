@@ -49,8 +49,10 @@ func (MTFCodec) EncodeBlock(src []byte) ([]byte, error) {
 			// replace it with the index in the alphabet
 			if s == v {
 				src[i] = byte(j)
-				copy(symbols[1:], symbols[:j])
-				symbols[0] = s
+				if j > 0 {
+					copy(symbols[1:], symbols[:j])
+					symbols[0] = s
+				}
 				break
 			}
 		}
@@ -68,8 +70,10 @@ func (MTFCodec) DecodeBlock(src []byte) ([]byte, error) {
 			// replace it with the value at that index
 			if byte(j) == v {
 				src[i] = s
-				copy(symbols[1:], symbols[:j])
-				symbols[0] = s
+				if j > 0 {
+					copy(symbols[1:], symbols[:j])
+					symbols[0] = s
+				}
 				break
 			}
 		}
